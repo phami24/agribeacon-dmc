@@ -1,0 +1,35 @@
+yarn add react-native-ble-plx
+yarn add eventemitter3
+npx expo install expo-device
+```
+
+## 2. Giải thích các khái niệm
+
+### **Event Bus Pattern:**
+- **Event Bus**: Là trung tâm điều phối sự kiện, cho phép các component giao tiếp với nhau mà không cần biết về sự tồn tại của nhau
+- **emit()**: Phát ra (phát sóng) một sự kiện với dữ liệu đi kèm
+- **on()**: Lắng nghe (đăng ký) một sự kiện cụ thể
+- **off()**: Hủy đăng ký lắng nghe sự kiện
+
+### **BLE (Bluetooth Low Energy):**
+- **Service**: Một nhóm chức năng của thiết bị BLE
+- **Characteristic**: Thuộc tính cụ thể trong Service, nơi đọc/ghi dữ liệu
+- **UUID**: Mã định danh duy nhất cho Service và Characteristic
+- **Scan**: Quét tìm kiếm thiết bị BLE xung quanh
+- **Connect**: Kết nối đến thiết bị
+- **Monitor**: Theo dõi sự thay đổi dữ liệu từ Characteristic
+
+## 3. Cấu trúc thư mục
+```
+app/
+  (tabs)/
+  services/
+    bleService.ts
+    eventBus.ts
+  hooks/
+    useBLE.ts
+  types/
+    ble.types.ts
+  screens/
+    BLEDeviceList.tsx
+    BLEDeviceDetail.tsx

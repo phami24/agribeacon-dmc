@@ -38,4 +38,7 @@ yarn-error.*
 
 # generated native folders
 /ios
-/android
+# /android
+
+# Android local properties (contains machine-specific SDK path)
+android/local.properties

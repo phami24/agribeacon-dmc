@@ -1,39 +1,65 @@
 {
   "expo": {
-    "name": "device-mission-controller",
-    "slug": "device-mission-controller",
+    "name": "Agribeacon DMC",
+    "slug": "agribeacon",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "devicemissioncontroller",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+
+    "icon": "./assets/icon.png",
+
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect BLE devices",
+        "NSBluetoothPeripheralUsageDescription": "This app uses Bluetooth to connect BLE devices"
+      }
     },
+
     "android": {
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "package": "com.anonymous.yourappslug",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "blockedPermissions": [],
+      "navigationBar": {
+        "visible": "immersive"
+      },
+      "statusBar": {
+        "hidden": true
+      }
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
+
     "plugins": [
-      "expo-router"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to use Bluetooth"
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoicGhhbWl6IiwiYSI6ImNtaHlpYjdncjA0aDgyaXF6YWV0Y3RiN2EifQ.LFy_I6P8E4_umZ5ALIW8gQ"
+        }
+      ]
+    ]
   }
 }
