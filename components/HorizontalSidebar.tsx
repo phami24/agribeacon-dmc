@@ -1,15 +1,16 @@
 // components/HorizontalSidebar.tsx
 // Component cho màn hình ngang (landscape) - Sidebar ở bên phải, full height
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import {
     Animated,
-    Dimensions,
-    PanResponder,
     StyleSheet,
     View,
+    TouchableOpacity,
+    Text,
+    useWindowDimensions,
 } from "react-native";
 
-const { width, height } = Dimensions.get("window");
+const TOGGLE_BUTTON_SIZE = 40;
 
 interface HorizontalSidebarProps {
   children: React.ReactNode;
@@ -26,7 +27,7 @@ interface HorizontalSidebarProps {
 export default function HorizontalSidebar({
   children,
   collapsedWidth = 60,
-  expandedWidth = width * 0.35,
+  expandedWidth: expandedWidthProp,
   backgroundColor = "rgba(0, 0, 0, 0.75)",
   defaultExpanded = false,
   initialWidth,
@@ -34,100 +35,57 @@ export default function HorizontalSidebar({
   onWidthChange,
   minWidth, // Nếu có minWidth, khi scroll đến giá trị này sẽ tự động đóng sidebar
 }: HorizontalSidebarProps) {
-  // Khi collapsed, chỉ còn một nửa width
-  const actualCollapsedWidth = collapsedWidth / 2;
-  // Nếu có minWidth, default là minWidth; nếu có initialWidth, dùng nó; nếu không, dùng defaultExpanded logic
-  const startWidth = initialWidth ?? (minWidth ?? (defaultExpanded ? expandedWidth : actualCollapsedWidth));
-  const sidebarWidth = useRef(new Animated.Value(startWidth)).current;
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded || (initialWidth ? initialWidth > (actualCollapsedWidth + expandedWidth) / 2 : false));
-  const [currentWidth, setCurrentWidth] = useState(startWidth);
-  const startWidthRef = useRef(startWidth);
+  const { width: windowWidth } = useWindowDimensions();
 
-  // Lắng nghe thay đổi width để cập nhật state
-  React.useEffect(() => {
-    const listener = ({ value }: { value: number }) => {
+  const actualCollapsedWidth = Math.max(collapsedWidth, TOGGLE_BUTTON_SIZE + 16);
+  const maxSidebarWidth = Math.max(windowWidth - 16, actualCollapsedWidth);
+
+  const expandedTargetWidth = useMemo(() => {
+    const requestedExpanded = expandedWidthProp ?? windowWidth * 0.4;
+    const requestedMin = minWidth ?? requestedExpanded;
+    const desired = Math.max(requestedExpanded, requestedMin, actualCollapsedWidth + 1);
+    return Math.min(desired, maxSidebarWidth);
+  }, [expandedWidthProp, minWidth, windowWidth, maxSidebarWidth, actualCollapsedWidth]);
+
+  const initialTargetWidth = useMemo(() => {
+    const preferred = initialWidth ?? (defaultExpanded ? expandedTargetWidth : actualCollapsedWidth);
+    return Math.min(Math.max(preferred, actualCollapsedWidth), maxSidebarWidth);
+  }, [initialWidth, defaultExpanded, expandedTargetWidth, actualCollapsedWidth, maxSidebarWidth]);
+
+  const [isExpanded, setIsExpanded] = useState(initialTargetWidth > actualCollapsedWidth + 1);
+  const [currentWidth, setCurrentWidth] = useState(initialTargetWidth);
+  const sidebarWidth = useRef(new Animated.Value(initialTargetWidth)).current;
+
+  useEffect(() => {
+    const listenerId = sidebarWidth.addListener(({ value }) => {
       setCurrentWidth(value);
-      const threshold = (actualCollapsedWidth + expandedWidth) / 2;
-      const newExpanded = value > threshold;
-      setIsExpanded(newExpanded);
-      // Notify parent about expanded state change
-      if (onExpandedChange) {
-        onExpandedChange(newExpanded);
-      }
-      // Notify parent about width change
-      if (onWidthChange) {
-        onWidthChange(value);
-      }
-    };
-    const listenerId = sidebarWidth.addListener(listener);
-    
+    });
     return () => {
       sidebarWidth.removeListener(listenerId);
     };
-  }, [sidebarWidth, actualCollapsedWidth, expandedWidth, onExpandedChange, onWidthChange]);
+  }, [sidebarWidth]);
 
-  // Pan responder for drag gesture - chỉ kéo từ drag handle
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Chỉ phản hồi với swipe ngang
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 3;
-      },
-      onPanResponderGrant: (evt) => {
-        sidebarWidth.stopAnimation();
-        sidebarWidth.flattenOffset();
-        // Lấy giá trị hiện tại từ state
-        startWidthRef.current = currentWidth;
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        // Tính width mới dựa trên drag (dx âm = kéo trái = mở rộng)
-        const newWidth = startWidthRef.current - gestureState.dx;
-        
-        let clampedWidth: number;
-        if (minWidth) {
-          // Cho phép kéo tự do, cho phép kéo nhỏ hơn minWidth để user có thể kéo qua minWidth và đóng
-          // Giới hạn tối thiểu là collapsed, tối đa là width màn hình
-          clampedWidth = Math.max(actualCollapsedWidth, Math.min(width - 16, newWidth));
-        } else {
-          // Behavior cũ: cho phép kéo trong khoảng collapsed và expanded
-          clampedWidth = Math.max(actualCollapsedWidth, Math.min(expandedWidth, newWidth));
-        }
-        
-        // Set trực tiếp, không animation để mượt hơn
-        sidebarWidth.setValue(clampedWidth);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        // Tính width cuối cùng
-        const finalWidth = startWidthRef.current - gestureState.dx;
-        
-        let targetWidth: number;
-        if (minWidth) {
-          // Nếu có minWidth: khi kéo đến minWidth hoặc nhỏ hơn thì tự đóng về collapsed
-          if (finalWidth <= minWidth) {
-            // Kéo đến minWidth hoặc nhỏ hơn -> tự đóng về collapsed
-            targetWidth = actualCollapsedWidth;
-          } else {
-            // Nếu đang ở trên minWidth, giữ nguyên (có thể lớn hơn minWidth, giới hạn tối đa bằng width màn hình)
-            targetWidth = Math.min(width - 16, finalWidth);
-          }
-        } else {
-          // Behavior cũ: snap về một trong hai trạng thái
-          const clampedWidth = Math.max(actualCollapsedWidth, Math.min(expandedWidth, finalWidth));
-          const threshold = (actualCollapsedWidth + expandedWidth) / 2;
-          targetWidth = clampedWidth > threshold ? expandedWidth : actualCollapsedWidth;
-        }
-        
-        // Animate về trạng thái đích
-        Animated.timing(sidebarWidth, {
-          toValue: targetWidth,
-          duration: 200,
-          useNativeDriver: false,
-        }).start();
-      },
-    })
-  ).current;
+  useEffect(() => {
+    onWidthChange?.(currentWidth);
+  }, [currentWidth, onWidthChange]);
 
+  useEffect(() => {
+    onExpandedChange?.(isExpanded);
+  }, [isExpanded, onExpandedChange]);
+
+  useEffect(() => {
+    const targetWidth = isExpanded ? expandedTargetWidth : actualCollapsedWidth;
+    sidebarWidth.stopAnimation();
+    Animated.timing(sidebarWidth, {
+      toValue: targetWidth,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [isExpanded, expandedTargetWidth, actualCollapsedWidth, sidebarWidth]);
+
+  const toggleSidebar = useCallback(() => {
+    setIsExpanded((prev) => !prev);
+  }, []);
 
   return (
     <Animated.View
@@ -140,21 +98,20 @@ export default function HorizontalSidebar({
       ]}
       pointerEvents="box-none"
     >
-      {/* Drag handle ở giữa sidebar - chỉ để kéo */}
-      <View 
-        style={styles.dragHandleContainer} 
-        pointerEvents="auto"
-        {...panResponder.panHandlers}
-      >
-        <View style={styles.dragHandle} />
-      </View>
-
       {/* Content - Hiển thị khi width đủ lớn */}
       {currentWidth > actualCollapsedWidth + 20 && (
         <View style={styles.content} pointerEvents="auto">
           {children}
         </View>
       )}
+
+      <TouchableOpacity
+        style={styles.toggleButton}
+        onPress={toggleSidebar}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.toggleButtonText}>{isExpanded ? ">" : "<"}</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -175,27 +132,32 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     zIndex: 10,
   },
-  dragHandleContainer: {
-    position: "absolute",
-    left: -8, // Mở rộng ra ngoài một chút để dễ kéo
-    top: "50%",
-    transform: [{ translateY: -20 }],
-    width: 24, // Tăng width để dễ kéo hơn
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 20,
-  },
-  dragHandle: {
-    width: 4,
-    height: 40,
-    backgroundColor: "rgba(255, 255, 255, 0.6)",
-    borderRadius: 2,
-  },
   content: {
     flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
     paddingLeft: 20, // Thêm padding trái để tránh drag handle
+  },
+  toggleButton: {
+    position: "absolute",
+    bottom: 12,
+    left: "50%",
+    transform: [{ translateX: -20 }],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 6,
+  },
+  toggleButtonText: {
+    color: "#000",
+    fontSize: 18,
+    fontWeight: "700",
   },
 });

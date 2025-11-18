@@ -190,11 +190,21 @@ class BLEService {
       { allowDuplicates: false }, // Không cho phép duplicate devices
       (error, device) => {
         if (error) {
-          console.error("[BLE] ❌ Scan error:", error);
-          eventBus.emit(BLEEventType.ERROR, {
-            error: error.message,
-            context: "scanDevices",
-          });
+          const errorMessage = error.message || "Unknown scan error";
+          const isBenignScanError =
+            errorMessage.includes("Cannot start scanning operation") ||
+            errorMessage.includes("already scanning");
+
+          if (isBenignScanError) {
+            console.log("[BLE] ⚠️ Scan request ignored (already scanning).");
+          } else {
+            console.error("[BLE] ❌ Scan error:", errorMessage);
+            eventBus.emit(BLEEventType.ERROR, {
+              error: errorMessage,
+              context: "scanDevices",
+            });
+          }
+
           this.stopScan();
           return;
         }

@@ -6,8 +6,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Dimensions,
   Image,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import MapboxGL from "@rnmapbox/maps";
@@ -20,11 +20,11 @@ import { useBLEStoreSync } from "../../hooks/useBLEStoreSync";
 import { useDroneDataStore } from "../../store/droneDataStore";
 import * as BleConstants from "../../constants/BLEConstants";
 
-const { width, height } = Dimensions.get("window");
-
 export default function MissionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const SIDEBAR_TARGET_WIDTH = Math.min(Math.max(windowWidth * 0.45, 320), windowWidth - 24);
   const mapRef = useRef<MapboxGL.MapView>(null);
   const cameraRef = useRef<MapboxGL.Camera>(null);
   const [selectedArea, setSelectedArea] = useState<FlightArea | null>(
@@ -32,7 +32,11 @@ export default function MissionScreen() {
   );
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [sidebarCurrentWidth, setSidebarCurrentWidth] = useState(width / 3);
+  const [sidebarCurrentWidth, setSidebarCurrentWidth] = useState(SIDEBAR_TARGET_WIDTH);
+
+  useEffect(() => {
+    setSidebarCurrentWidth(SIDEBAR_TARGET_WIDTH);
+  }, [SIDEBAR_TARGET_WIDTH]);
   
   // BLE setup - KHÔNG sync store để giảm lag (chỉ cần connection state)
   const { connectionState } = useBLE();
@@ -251,9 +255,10 @@ export default function MissionScreen() {
       {/* Horizontal Sidebar - Flight Areas List (bên phải màn hình ngang, full height) */}
       <HorizontalSidebar
         collapsedWidth={60}
-        minWidth={width * 0.35} // Minimum width - chỉ được kéo nhỏ đến giá trị này, nếu nhỏ hơn sẽ đóng
+        expandedWidth={SIDEBAR_TARGET_WIDTH}
+        minWidth={SIDEBAR_TARGET_WIDTH} // Giữ sidebar mở rộng ở 2/3 màn hình
         backgroundColor="rgba(0, 0, 0, 0.75)"
-        initialWidth={width /2}
+        initialWidth={SIDEBAR_TARGET_WIDTH}
         onExpandedChange={(expanded) => {
           setIsSidebarExpanded(expanded);
         }}

@@ -1,34 +1,39 @@
 // components/CompassOverlay.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
+  Dimensions,
   Image,
   PanResponder,
-  Dimensions,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  Animated,
+  View,
 } from "react-native";
+
+const COMPASS_SIZE_RATIO = 0.65;
+const MIN_DRAG_DISTANCE_RATIO = 0.08;
+const DRAG_ACTIVATION_DISTANCE_RATIO = 0.02;
+const DRAG_ACTIVATION_MIN_PX = 12;
+const ROTATION_GAIN = 1.35;
 
 interface CompassOverlayProps {
   initialAngle: number; // -180 to 180
-  centerPosition?: { latitude: number; longitude: number } | null; // Vị trí center của polygon
-  mapRef?: React.RefObject<any>; // MapView ref để convert coordinates
   onAngleChange: (angle: number) => void;
   onClose: () => void;
 }
 
 export default function CompassOverlay({
   initialAngle,
-  centerPosition,
-  mapRef,
   onAngleChange,
   onClose,
 }: CompassOverlayProps) {
   const [rotationAngle, setRotationAngle] = useState(initialAngle);
-  const [dimensions, setDimensions] = useState(Dimensions.get("window"));
+  const [dimensions, setDimensions] = useState(() => Dimensions.get("window"));
   const [compassPosition, setCompassPosition] = useState<{ left: number; top: number } | null>(null);
+  const [compassSize, setCompassSize] = useState(() => {
+    const { width, height } = Dimensions.get("window");
+    return Math.min(width, height) * COMPASS_SIZE_RATIO;
+  });
 
   // Update dimensions when screen changes
   useEffect(() => {
@@ -44,120 +49,138 @@ export default function CompassOverlay({
 
   const { width, height } = dimensions;
 
-  // Gesture state để vuốt màn hình điều chỉnh hướng
-  const startX = useRef(0);
-  const startY = useRef(0);
-  const startRotationAngle = useRef(initialAngle);
   const isDragging = useRef(false);
-  const lastUpdateAngle = useRef(initialAngle);
+  const dragActivatedRef = useRef(false);
+  const initialTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTouchAngleRef = useRef<number | null>(null);
+  const rotationAngleRef = useRef(initialAngle);
 
   // Sync rotationAngle when initialAngle changes (when overlay opens with new value)
   useEffect(() => {
     setRotationAngle(initialAngle);
-    startRotationAngle.current = initialAngle;
-    lastUpdateAngle.current = initialAngle;
+    rotationAngleRef.current = initialAngle;
   }, [initialAngle]);
 
-  const compassSize = Math.min(width, height) * 0.6;
-  
-  // Tính toán vị trí la bàn: vì camera đã center vào polygon center,
-  // nên la bàn ở giữa màn hình sẽ đúng với tâm polygon
-  // Tuy nhiên, nếu có mapRef, có thể convert chính xác hơn
+  // Luôn giữ kích thước la bàn lớn, cố định theo màn hình
   useEffect(() => {
-    if (centerPosition && mapRef?.current) {
-      // Thử convert coordinates sang screen coordinates
-      // @rnmapbox/maps có thể có method khác, nhưng vì camera đã center,
-      // nên giữa màn hình sẽ đúng
-      try {
-        // Vì camera đã center vào polygon center, giữa màn hình = polygon center
-        setCompassPosition({
-          left: (width - compassSize) / 2,
-          top: (height - compassSize) / 2,
-        });
-      } catch {
-        // Fallback: giữa màn hình
-        setCompassPosition({
-          left: (width - compassSize) / 2,
-          top: (height - compassSize) / 2,
-        });
-      }
-    } else {
-      // Không có centerPosition: giữa màn hình
-      setCompassPosition({
-        left: (width - compassSize) / 2,
-        top: (height - compassSize) / 2,
-      });
-    }
-  }, [centerPosition, mapRef, width, height, compassSize]);
+    setCompassSize(Math.min(dimensions.width, dimensions.height) * COMPASS_SIZE_RATIO);
+  }, [dimensions]);
+  
+  // Luôn đặt la bàn ở giữa màn hình để dễ thao tác
+  useEffect(() => {
+    setCompassPosition({
+      left: (width - compassSize) / 2,
+      top: (height - compassSize) / 2,
+    });
+  }, [width, height, compassSize]);
 
   // La bàn ở giữa màn hình (vì camera đã center vào polygon center)
   const compassLeft = compassPosition?.left ?? (width - compassSize) / 2;
   const compassTop = compassPosition?.top ?? (height - compassSize) / 2;
+  const compassCenter = useMemo(() => ({
+    x: compassLeft + compassSize / 2,
+    y: compassTop + compassSize / 2,
+  }), [compassLeft, compassTop, compassSize]);
+
+  const dragThreshold = compassSize * MIN_DRAG_DISTANCE_RATIO;
+  const dragActivationDistance = useMemo(
+    () => Math.max(DRAG_ACTIVATION_MIN_PX, compassSize * DRAG_ACTIVATION_DISTANCE_RATIO),
+    [compassSize]
+  );
+
+  const calculateAngleFromTouch = useCallback((pageX: number, pageY: number, ignoreThreshold = false) => {
+    const dx = pageX - compassCenter.x;
+    const dy = pageY - compassCenter.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (!ignoreThreshold && distance < dragThreshold) {
+      return null;
+    }
+
+    const radians = Math.atan2(dx, -dy);
+    let degrees = radians * (180 / Math.PI);
+    if (degrees > 180) degrees -= 360;
+    if (degrees < -180) degrees += 360;
+    return degrees;
+  }, [compassCenter, dragThreshold]);
+
+  const normalizeAngle = useCallback((angle: number) => {
+    let normalized = angle;
+    while (normalized > 180) normalized -= 360;
+    while (normalized < -180) normalized += 360;
+    return normalized;
+  }, []);
+
+  // Chỉ cập nhật state để hiển thị, không gọi onAngleChange (để tránh vẽ line liên tục)
+  const updateRotation = useCallback((angle: number) => {
+    const normalized = normalizeAngle(angle);
+    rotationAngleRef.current = normalized;
+    setRotationAngle(normalized);
+    // KHÔNG gọi onAngleChange ở đây - chỉ gọi khi đóng la bàn
+  }, [normalizeAngle]);
+
+  const hasMovedEnough = useCallback((pageX: number, pageY: number) => {
+    const start = initialTouchRef.current;
+    if (!start) return false;
+    const dx = pageX - start.x;
+    const dy = pageY - start.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance >= dragActivationDistance;
+  }, [dragActivationDistance]);
 
   // Pan responder để vuốt màn hình điều chỉnh hướng
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: (evt) => evt.nativeEvent.touches?.length === 1,
+      onMoveShouldSetPanResponder: (evt) => evt.nativeEvent.touches?.length === 1,
       onPanResponderGrant: (evt) => {
+        if (evt.nativeEvent.touches?.length !== 1) {
+          isDragging.current = false;
+          return;
+        }
+        const touch = evt.nativeEvent.touches[0];
+        const angle = calculateAngleFromTouch(touch.pageX, touch.pageY);
+        if (angle === null) {
+          isDragging.current = false;
+          return;
+        }
         isDragging.current = true;
-        const { pageX, pageY } = evt.nativeEvent;
-        startX.current = pageX;
-        startY.current = pageY;
-        startRotationAngle.current = rotationAngle;
-        lastUpdateAngle.current = rotationAngle;
+        dragActivatedRef.current = false;
+        initialTouchRef.current = { x: touch.pageX, y: touch.pageY };
+        lastTouchAngleRef.current = angle;
       },
       onPanResponderMove: (evt) => {
-        if (!isDragging.current) return;
+        if (!isDragging.current || evt.nativeEvent.touches?.length !== 1) return;
 
-        const { pageX, pageY } = evt.nativeEvent;
-        
-        // Tính góc từ center của la bàn đến điểm touch
-        const compassCenterX = compassLeft + compassSize / 2;
-        const compassCenterY = compassTop + compassSize / 2;
-        
-        // Vector từ center đến điểm touch hiện tại
-        const toX = pageX - compassCenterX;
-        const toY = pageY - compassCenterY;
-        const toAngle = Math.atan2(toY, toX) * (180 / Math.PI);
-        
-        // Vector từ center đến điểm touch ban đầu
-        const fromX = startX.current - compassCenterX;
-        const fromY = startY.current - compassCenterY;
-        const fromAngle = Math.atan2(fromY, fromX) * (180 / Math.PI);
-        
-        // Tính góc quay (delta) - góc mà người dùng đã vuốt
-        let angleDelta = toAngle - fromAngle;
-        
-        // Normalize to -180 to 180
-        while (angleDelta > 180) angleDelta -= 360;
-        while (angleDelta < -180) angleDelta += 360;
-        
-        // Giảm sensitivity: nhân với hệ số 0.4 để vuốt chậm hơn
-        angleDelta = angleDelta * 0.4;
-        
-        // Tính góc mới của la bàn
-        let newAngle = startRotationAngle.current + angleDelta;
-        
-        // Normalize to -180 to 180
-        while (newAngle > 180) newAngle -= 360;
-        while (newAngle < -180) newAngle += 360;
-
-        // Chỉ update nếu góc thay đổi đáng kể (tránh lag)
-        const angleDiff = Math.abs(newAngle - lastUpdateAngle.current);
-        const normalizedAngleDiff = Math.min(angleDiff, 360 - angleDiff);
-        
-        if (normalizedAngleDiff > 0.5) {
-          lastUpdateAngle.current = newAngle;
-          setRotationAngle(newAngle);
-          onAngleChange(newAngle);
+        const touch = evt.nativeEvent.touches[0];
+        if (!dragActivatedRef.current) {
+          if (!hasMovedEnough(touch.pageX, touch.pageY)) {
+            return;
+          }
+          dragActivatedRef.current = true;
         }
+        const angle = calculateAngleFromTouch(touch.pageX, touch.pageY, true);
+        if (angle === null) return;
+        if (lastTouchAngleRef.current === null) {
+          lastTouchAngleRef.current = angle;
+          return;
+        }
+        const delta = normalizeAngle(angle - lastTouchAngleRef.current) * ROTATION_GAIN;
+        const baseAngle = rotationAngleRef.current;
+        const targetAngle = baseAngle + delta;
+        updateRotation(targetAngle);
+        lastTouchAngleRef.current = angle;
       },
       onPanResponderRelease: () => {
         isDragging.current = false;
+        dragActivatedRef.current = false;
+        initialTouchRef.current = null;
+        lastTouchAngleRef.current = null;
       },
       onPanResponderTerminate: () => {
         isDragging.current = false;
+        dragActivatedRef.current = false;
+        initialTouchRef.current = null;
+        lastTouchAngleRef.current = null;
       },
     })
   ).current;
@@ -171,7 +194,15 @@ export default function CompassOverlay({
       />
       
       {/* Close button */}
-      <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+      <TouchableOpacity 
+        style={styles.closeButton} 
+        onPress={() => {
+          // Gọi onAngleChange với giá trị cuối cùng trước khi đóng
+          const finalAngle = normalizeAngle(rotationAngleRef.current);
+          onAngleChange(finalAngle);
+          onClose();
+        }}
+      >
         <Text style={styles.closeButtonText}>✕</Text>
       </TouchableOpacity>
 
@@ -208,6 +239,10 @@ export default function CompassOverlay({
           ]}
           resizeMode="contain"
         />
+
+        <View pointerEvents="none" style={styles.angleReadout}>
+          <Text style={styles.angleText}>{`${Math.round(rotationAngle)}°`}</Text>
+        </View>
       </View>
     </>
   );
@@ -260,6 +295,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
+  },
+  angleReadout: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    height: "100%",
+  },
+  angleText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#E50083",
+    textShadowColor: "rgba(0, 0, 0, 0.25)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
 
