@@ -8,12 +8,17 @@ interface BluetoothConnectButtonProps {
   connectionState: BLEConnectionState | null;
   isScanning: boolean;
   onPress?: () => void;
+  icons?: {
+    connected?: string;
+    disconnected?: string;
+  };
 }
 
 export default function BluetoothConnectButton({
   connectionState,
   isScanning,
   onPress,
+  icons = {},
 }: BluetoothConnectButtonProps) {
   const isConnected = connectionState?.isConnected ?? false;
   const isConnecting = isScanning || (connectionState ? !connectionState.isConnected : false);
@@ -22,6 +27,13 @@ export default function BluetoothConnectButton({
   const borderColor = isConnected ? "#2e7d32" : "#9e9e9e"; // Xanh lá khi connected, xám khi chưa
   const backgroundColor = isConnected ? "#2e7d32" : "rgba(255, 255, 255, 0.95)"; // Nền xanh khi connected, trắng khi chưa
   const iconColor = isConnected ? "#ffffff" : "#9e9e9e"; // Trắng khi connected, xám khi chưa
+
+  // Default icon names
+  const defaultIcons = {
+    connected: "bluetooth",
+    disconnected: "bluetooth-disabled",
+  };
+  const mergedIcons = { ...defaultIcons, ...icons };
 
   return (
     <TouchableOpacity
@@ -41,7 +53,7 @@ export default function BluetoothConnectButton({
           <ActivityIndicator size="small" color={iconColor} />
         ) : (
           <MaterialIcons
-            name={isConnected ? "bluetooth" : "bluetooth-disabled"}
+            name={isConnected ? mergedIcons.connected : mergedIcons.disconnected}
             size={24}
             color={iconColor}
           />

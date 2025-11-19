@@ -1,17 +1,44 @@
 // components/StatusIndicator.tsx
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ViewStyle, TextStyle } from "react-native";
 
 interface StatusIndicatorProps {
   isReady: boolean;
+  readyText?: string;
+  notReadyText?: string;
+  readyColor?: string;
+  notReadyColor?: string;
+  customStyles?: {
+    container?: ViewStyle;
+    dot?: ViewStyle;
+    dotReady?: ViewStyle;
+    dotNotReady?: ViewStyle;
+    text?: TextStyle;
+  };
 }
 
-export default function StatusIndicator({ isReady }: StatusIndicatorProps) {
+export default function StatusIndicator({
+  isReady,
+  readyText = "Sẵn sàng bay",
+  notReadyText = "Chưa sẵn sàng bay",
+  readyColor = "#4CAF50",
+  notReadyColor = "#ff4444",
+  customStyles = {},
+}: StatusIndicatorProps) {
+  const mergedStyles = { ...styles, ...customStyles };
+
   return (
-    <View style={styles.container}>
-      <View style={[styles.dot, isReady ? styles.dotReady : styles.dotNotReady]} />
-      <Text style={styles.text}>
-        {isReady ? "Sẵn sàng bay" : "Chưa sẵn sàng bay"}
+    <View style={mergedStyles.container}>
+      <View
+        style={[
+          mergedStyles.dot,
+          isReady
+            ? [mergedStyles.dotReady, { backgroundColor: readyColor }]
+            : [mergedStyles.dotNotReady, { backgroundColor: notReadyColor }],
+        ]}
+      />
+      <Text style={mergedStyles.text}>
+        {isReady ? readyText : notReadyText}
       </Text>
     </View>
   );

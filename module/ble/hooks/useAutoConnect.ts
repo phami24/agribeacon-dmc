@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useBLE } from "./useBLE";
-import * as BleConstants from "../../../constants/BLEConstants";
+import { useBLEConfig } from "../context/BLEConfigContext";
 
 export const useAutoConnect = () => {
   const { startScan, connectionState, monitorCharacteristic, isScanning } = useBLE();
+  const { config } = useBLEConfig();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedMonitoringRef = useRef(false);
   const connectionStateRef = useRef(connectionState);
@@ -25,8 +26,8 @@ export const useAutoConnect = () => {
         hasStartedMonitoringRef.current = true;
         setTimeout(() => {
           monitorCharacteristic(
-            BleConstants.NORDIC_UART_SERVICE,
-            BleConstants.NORDIC_RX_UUID
+            config.serviceUUID,
+            config.rxCharacteristicUUID
           ).catch(() => {
             hasStartedMonitoringRef.current = false;
           });

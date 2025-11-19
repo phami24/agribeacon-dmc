@@ -40,7 +40,6 @@ export interface BLEConnectionState {
 export enum BLEEventType {
   // Device events
   DEVICE_DISCOVERED = 'ble:device:discovered', // Chỉ thiết bị target
-  ALL_DEVICE_DISCOVERED = 'ble:all:device:discovered', // Tất cả thiết bị
   DEVICE_CONNECTED = 'ble:device:connected',
   DEVICE_DISCONNECTED = 'ble:device:disconnected',
   
@@ -75,7 +74,6 @@ export interface ParsedData {
  */
 export type BLEEventData = {
   [BLEEventType.DEVICE_DISCOVERED]: BLEDevice;
-  [BLEEventType.ALL_DEVICE_DISCOVERED]: BLEDevice;
   [BLEEventType.DEVICE_CONNECTED]: { deviceId: string; deviceName: string | null };
   [BLEEventType.DEVICE_DISCONNECTED]: { deviceId: string; reason?: string };
   [BLEEventType.DATA_RECEIVED]: BLECharacteristicData;

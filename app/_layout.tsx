@@ -1,41 +1,41 @@
 // app/_layout.tsx
+// DEMO APP - Đây là ví dụ sử dụng library
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import MapboxGL from '@rnmapbox/maps';
 import { MAPBOX_ACCESS_TOKEN } from '../constants/MapboxConstants';
+import { BLEConfigProvider } from '../module/ble/context/BLEConfigContext';
+import { agriBeaconBLEConfig } from '../constants/exampleBLEConfig';
 import { useAutoConnect } from '../module/ble/hooks/useAutoConnect';
+import { useBLEStoreSync } from '../hooks/useBLEStoreSync';
 
 // Initialize Mapbox
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
-export default function RootLayout() {
-  // Auto connect/reconnect BLE - chỉ chạy 1 lần cho toàn bộ app
+function AppContent() {
+  useBLEStoreSync();
   useAutoConnect();
 
   return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        navigationBarHidden: true,
+        contentStyle: { backgroundColor: '#000' },
+      }}
+    />
+  );
+}
+
+export default function RootLayout() {
+  return (
     <SafeAreaProvider>
       <StatusBar hidden />
-      <Stack
-        screenOptions={{
-          headerShown: false, // Ẩn header cho tất cả màn hình
-          navigationBarHidden: true, // Ẩn navigation bar (Android)
-          contentStyle: { backgroundColor: '#000' }, // Background màu đen
-        }}
-      >
-        <Stack.Screen 
-          name="index" 
-          options={{ 
-            headerShown: false,
-          }} 
-        />
-        <Stack.Screen 
-          name="mission" 
-          options={{ 
-            headerShown: false,
-          }} 
-        />
-      </Stack>
+      {/* DEMO: Sử dụng example config - Trong thực tế, bạn phải tạo config của riêng mình */}
+      <BLEConfigProvider config={agriBeaconBLEConfig}>
+        <AppContent />
+      </BLEConfigProvider>
     </SafeAreaProvider>
   );
 }

@@ -9,36 +9,66 @@ import { eventBus } from '../module/event-bus';
 import { BLEEventType } from '../module/ble/types';
 import { useBLEStore } from '../store/bleStore';
 import { useDroneDataStore } from '../store/droneDataStore';
+import { bleService } from '../module/ble/services';
 
 export const useBLEStoreSync = () => {
-  const {
-    addDevice,
-    setConnectionState,
-    setIsScanning,
-    addLog,
-    setLatestData,
-    addParsedData,
-    setRssi,
-    setError,
-  } = useBLEStore();
+  const setConnectionState = useBLEStore((state) => state.setConnectionState);
+  const setIsScanning = useBLEStore((state) => state.setIsScanning);
+  const addLog = useBLEStore((state) => state.addLog);
+  const setLatestData = useBLEStore((state) => state.setLatestData);
+  const addParsedData = useBLEStore((state) => state.addParsedData);
+  const setRssi = useBLEStore((state) => state.setRssi);
+  const setError = useBLEStore((state) => state.setError);
+  const connectionState = useBLEStore((state) => state.connectionState);
+
+  useEffect(() => {
+    const connectedDevice = bleService.getConnectedDevice();
+    if (connectedDevice) {
+      setConnectionState({
+        deviceId: connectedDevice.id,
+        isConnected: true,
+        mtu: connectedDevice.mtu,
+      });
+    }
+    setIsScanning(bleService.isScanningActive());
+  }, [setConnectionState, setIsScanning]);
+
+  useEffect(() => {
+    if (!connectionState?.isConnected) {
+      setRssi(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const readRSSI = async () => {
+      try {
+        const value = await bleService.readRSSI();
+        if (!isCancelled && value !== null) {
+          setRssi(value);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    readRSSI();
+    const interval = setInterval(readRSSI, 3000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [connectionState?.isConnected, setRssi]);
 
   useEffect(() => {
     // Subscribe tất cả events và update store
-
-    // Device discovered
-    const unsubscribeAllDeviceDiscovered = eventBus.on(
-      BLEEventType.ALL_DEVICE_DISCOVERED,
-      (device) => {
-        addDevice(device);
-      }
-    );
 
     // Scan started
     const unsubscribeScanStarted = eventBus.on(
       BLEEventType.SCAN_STARTED,
       () => {
         setIsScanning(true);
-        useBLEStore.getState().clearDevices(); // Clear devices khi bắt đầu scan mới
         addLog(`[${new Date().toLocaleTimeString()}] 🔍 Đang quét thiết bị...`);
       }
     );
@@ -189,7 +219,6 @@ export const useBLEStoreSync = () => {
 
     // Cleanup
     return () => {
-      unsubscribeAllDeviceDiscovered();
       unsubscribeScanStarted();
       unsubscribeScanStopped();
       unsubscribeDeviceDiscovered();
@@ -200,15 +229,6 @@ export const useBLEStoreSync = () => {
       unsubscribeDataParsed();
       unsubscribeError();
     };
-  }, [
-    addDevice,
-    setConnectionState,
-    setIsScanning,
-    addLog,
-    setLatestData,
-    addParsedData,
-    setRssi,
-    setError,
-  ]);
+  }, [setConnectionState, setIsScanning, addLog, setLatestData, addParsedData, setRssi, setError]);
 };
 

@@ -6,7 +6,7 @@ import * as ExpoDevice from "expo-device";
 import { eventBus } from "../../event-bus";
 import { BLEEventType, BLEDevice, BLECharacteristicData, ParsedData } from "../types";
 import base64 from "base64-js";
-import { TARGET_DEVICE_NAME } from "../../../constants/BLEConstants";
+import { BLEConfig } from "../../../types/bleConfig";
 
 /**
  * BLEService - Quản lý tất cả tương tác với Bluetooth BLE
@@ -28,6 +28,8 @@ class BLEService {
   private isScanning: boolean = false;
   // Lưu giá trị cũ để chỉ log khi thay đổi (trừ WP)
   private lastParsedValues: Map<string, string> = new Map();
+  // BLE Configuration - BẮT BUỘC phải được set từ bên ngoài
+  private config: BLEConfig | null = null;
 
   /**
    * Private constructor - Chỉ khởi tạo từ bên trong
@@ -45,6 +47,29 @@ class BLEService {
       BLEService.instance = new BLEService();
     }
     return BLEService.instance;
+  }
+
+  /**
+   * Set BLE configuration
+   * BẮT BUỘC phải gọi trước khi sử dụng các methods khác
+   */
+  public setConfig(config: BLEConfig): void {
+    this.config = config;
+    console.log("[BLE] Config set:", this.config);
+  }
+
+  /**
+   * Get current BLE configuration
+   * @throws Error nếu config chưa được set
+   */
+  public getConfig(): BLEConfig {
+    if (!this.config) {
+      throw new Error(
+        'BLEConfig has not been set. ' +
+        'Please call bleService.setConfig() or wrap your app with <BLEConfigProvider config={...}>'
+      );
+    }
+    return { ...this.config };
   }
 
   /**
@@ -187,7 +212,7 @@ class BLEService {
     // Bắt đầu scan
     this.manager.startDeviceScan(
       serviceUUIDs || null, // Lọc theo UUIDs hoặc null = scan tất cả
-      { allowDuplicates: false }, // Không cho phép duplicate devices
+      { allowDuplicates: true }, // Cho phép duplicate để cập nhật RSSI mục tiêu
       (error, device) => {
         if (error) {
           const errorMessage = error.message || "Unknown scan error";
@@ -209,49 +234,46 @@ class BLEService {
           return;
         }
 
-        // Emit TẤT CẢ thiết bị đã scan được
         if (device) {
+          const config = this.getConfig();
+          const resolvedName = device.name || device.localName || null;
+          const isTargetDevice = resolvedName === config.targetDeviceName;
+
+          if (!isTargetDevice) {
+            return;
+          }
+
           deviceCount++;
           const bleDevice: BLEDevice = {
             id: device.id,
-            name: device.name || null,
+            name: resolvedName,
             rssi: device.rssi,
             serviceUUIDs: device.serviceUUIDs || [],
           };
 
-          // CHỈ LOG target device hoặc devices có tên (không log "Unknown" để tránh spam)
-          if (device.name === TARGET_DEVICE_NAME || (device.name && device.name !== "Unknown")) {
-            console.log(
-              `[BLE] 📱 Device #${deviceCount} found:`,
-              bleDevice.name,
-              `(${bleDevice.id})`,
-              `RSSI: ${bleDevice.rssi}`
-            );
+          console.log(
+            `[BLE] 🎯 TARGET DEVICE FOUND #${deviceCount}:`,
+            bleDevice.name,
+            `(${bleDevice.id})`,
+            `RSSI: ${bleDevice.rssi}`
+          );
+
+          eventBus.emit(BLEEventType.DEVICE_DISCOVERED, bleDevice);
+
+          if (!this.connectedDevice) {
+            this.connectToDevice(device.id);
           }
 
-          // Emit tất cả thiết bị để hiển thị trong danh sách
-          eventBus.emit(BLEEventType.ALL_DEVICE_DISCOVERED, bleDevice);
-
-          // Nếu là thiết bị target → auto connect
-          if (device.name === TARGET_DEVICE_NAME) {
-            console.log("[BLE] 🎯 TARGET FOUND:", bleDevice.name);
-            eventBus.emit(BLEEventType.DEVICE_DISCOVERED, bleDevice);
-
-            // AUTO CONNECT HERE
-            if (!this.connectedDevice) {
-              this.connectToDevice(device.id);
-            }
-
-            // optional: stop scan once found
-            this.stopScan();
-          }
+          this.stopScan();
         }
       }
     );
 
     // Auto stop sau duration
     setTimeout(() => {
-      console.log(`[BLE] ⏹️ Scan completed after ${durationMs}ms. Found ${deviceCount} devices total.`);
+      console.log(
+        `[BLE] ⏹️ Scan completed after ${durationMs}ms. Target detections: ${deviceCount}.`
+      );
       this.stopScan();
     }, durationMs);
   }
@@ -266,6 +288,13 @@ class BLEService {
     this.isScanning = false;
     eventBus.emit(BLEEventType.SCAN_STOPPED, { timestamp: Date.now() });
     console.log("[BLE] ⏹️ Scan stopped");
+  }
+
+  /**
+   * Kiểm tra trạng thái scan hiện tại
+   */
+  public isScanningActive(): boolean {
+    return this.isScanning;
   }
 
   /**

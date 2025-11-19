@@ -1,3 +1,5 @@
+// app/index.tsx
+// DEMO APP - Đây là ví dụ sử dụng library
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";

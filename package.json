@@ -1,8 +1,23 @@
 {
-  "name": "device-mission-controller",
-  "main": "expo-router/entry",
-  "license": "0BSD",
+  "name": "@agribeacon/device-mission-controller",
   "version": "1.0.0",
+  "description": "React Native library for drone mission control via BLE with Mapbox integration",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "0BSD",
+  "keywords": [
+    "react-native",
+    "drone",
+    "mission-control",
+    "ble",
+    "bluetooth",
+    "mapbox",
+    "expo"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phami24/agribeacon-dmc.git"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -41,6 +56,7 @@
   "devDependencies": {
     "@types/base64-js": "^1.5.0",
     "@types/react": "~19.1.0",
+    "patch-package": "^8.0.1",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },

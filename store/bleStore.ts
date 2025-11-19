@@ -1,6 +1,6 @@
 // store/bleStore.ts
 import { create } from 'zustand';
-import { BLEDevice, BLEConnectionState, BLECharacteristicData } from '../module/ble/types';
+import { BLEConnectionState, BLECharacteristicData } from '../module/ble/types';
 
 /**
  * Parsed data từ format KEY:"value"
@@ -13,7 +13,6 @@ export interface ParsedData {
 
 interface BLEStore {
   // State
-  devices: Map<string, BLEDevice>;
   connectionState: BLEConnectionState | null;
   isScanning: boolean;
   logs: string[];
@@ -21,11 +20,6 @@ interface BLEStore {
   parsedData: Map<string, ParsedData>; // Key-value pairs từ data
   rssi: number | null;
   error: string | null;
-
-  // Actions - Devices
-  addDevice: (device: BLEDevice) => void;
-  clearDevices: () => void;
-  getDevicesArray: () => BLEDevice[];
 
   // Actions - Connection
   setConnectionState: (state: BLEConnectionState | null) => void;
@@ -52,7 +46,6 @@ interface BLEStore {
 
 export const useBLEStore = create<BLEStore>((set, get) => ({
   // Initial state
-  devices: new Map(),
   connectionState: null,
   isScanning: false,
   logs: [],
@@ -60,18 +53,6 @@ export const useBLEStore = create<BLEStore>((set, get) => ({
   parsedData: new Map(),
   rssi: null,
   error: null,
-
-  // Actions - Devices
-  addDevice: (device) =>
-    set((state) => {
-      const newDevices = new Map(state.devices);
-      newDevices.set(device.id, device);
-      return { devices: newDevices };
-    }),
-
-  clearDevices: () => set({ devices: new Map() }),
-
-  getDevicesArray: () => Array.from(get().devices.values()),
 
   // Actions - Connection
   setConnectionState: (state) => set({ connectionState: state }),
