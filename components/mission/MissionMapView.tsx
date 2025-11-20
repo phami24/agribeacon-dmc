@@ -6,6 +6,7 @@ import { Point } from "../../utils/polygonUtils";
 import { getPolygonCoordinates } from "../../utils/polygonUtils";
 import { MissionTheme, defaultMissionTheme } from "../../types/theme";
 import { MissionTranslations, defaultViTranslations } from "../../types/i18n";
+import DroneIcon from "../../assets/map/drone.svg";
 
 interface MissionMapViewProps {
   mapRef: React.RefObject<MapboxGL.MapView | null>;
@@ -101,7 +102,7 @@ export default function MissionMapView({
         }}
       />
 
-      {/* Render drone icon at HOME position */}
+      {/* Render drone icon at HOME position - Luôn hiển thị khi có homePosition */}
       {homePosition && (
         <MapboxGL.PointAnnotation
           id="drone-home"
@@ -112,11 +113,7 @@ export default function MissionMapView({
               mergedStyles.droneMarkerCircle,
               { backgroundColor: mergedTheme.colors.buttonSecondary, borderColor: mergedTheme.colors.droneMarker },
             ]}>
-              <Image
-                source={require("../../assets/drone.png")}
-                style={styles.droneIcon}
-                resizeMode="contain"
-              />
+              <DroneIcon width={18} height={18} />
             </View>
           </View>
         </MapboxGL.PointAnnotation>

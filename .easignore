@@ -1,0 +1,21 @@
+# EAS Build ignore file
+node_modules/
+.git/
+.expo/
+.expo-shared/
+*.log
+.DS_Store
+*.pem
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+dist/
+coverage/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
