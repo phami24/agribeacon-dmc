@@ -39,6 +39,26 @@ export interface MissionTranslations {
   // Common
   unit: string; // "°" for degrees
   altitudeUnit: string; // "m" for meters
+  
+  // Alert messages
+  error: string;
+  success: string;
+  errorNeed3Points: string;
+  errorBLENotConnected: string;
+  errorDroneNotReady: string;
+  successStartCommandSent: string;
+  errorStartCommandFailed: string;
+  errorStartCommandError: string;
+  successMissionSent: string;
+  errorMissionFailed: string;
+  errorMissionError: string;
+  clearAll: string;
+  confirmClearAll: string;
+  bluetoothNotEnabled: string;
+  bluetoothNotEnabledMessage: string;
+  openSettings: string;
+  errorCannotConnect: string;
+  sending: string; // "Đang gửi..."
 }
 
 export const defaultViTranslations: MissionTranslations = {
@@ -68,6 +88,23 @@ export const defaultViTranslations: MissionTranslations = {
   notReady: "Chưa sẵn sàng bay",
   unit: "°",
   altitudeUnit: "m",
+  error: "Lỗi",
+  success: "Thành công",
+  errorNeed3Points: "Cần ít nhất 3 điểm để gửi mission",
+  errorBLENotConnected: "Chưa kết nối BLE. Vui lòng đợi kết nối...",
+  errorDroneNotReady: "Drone chưa sẵn sàng. Status phải = 1",
+  successStartCommandSent: "Đã gửi lệnh bắt đầu bay!",
+  errorStartCommandFailed: "Gửi lệnh START thất bại",
+  errorStartCommandError: "Có lỗi xảy ra khi gửi lệnh START",
+  successMissionSent: "Đã gửi mission thành công!",
+  errorMissionFailed: "Gửi lệnh thất bại",
+  errorMissionError: "Có lỗi xảy ra khi gửi lệnh",
+  clearAll: "Xóa tất cả",
+  confirmClearAll: "Bạn có chắc chắn muốn xóa tất cả các điểm?",
+  bluetoothNotEnabled: "Bluetooth chưa bật",
+  bluetoothNotEnabledMessage: "Vui lòng bật Bluetooth để kết nối với thiết bị bay.",
+  openSettings: "Mở Cài đặt",
+  errorCannotConnect: "Không thể kết nối",
 };
 
 export const defaultEnTranslations: MissionTranslations = {
@@ -97,5 +134,22 @@ export const defaultEnTranslations: MissionTranslations = {
   notReady: "Not Ready",
   unit: "°",
   altitudeUnit: "m",
+  error: "Error",
+  success: "Success",
+  errorNeed3Points: "Need at least 3 points to send mission",
+  errorBLENotConnected: "BLE not connected. Please wait for connection...",
+  errorDroneNotReady: "Drone not ready. Status must be = 1",
+  successStartCommandSent: "Start command sent successfully!",
+  errorStartCommandFailed: "Failed to send START command",
+  errorStartCommandError: "Error occurred while sending START command",
+  successMissionSent: "Mission sent successfully!",
+  errorMissionFailed: "Failed to send command",
+  errorMissionError: "Error occurred while sending command",
+  clearAll: "Clear All",
+  confirmClearAll: "Are you sure you want to delete all points?",
+  bluetoothNotEnabled: "Bluetooth Not Enabled",
+  bluetoothNotEnabledMessage: "Please enable Bluetooth to connect to the drone.",
+  openSettings: "Open Settings",
+  errorCannotConnect: "Cannot connect",
 };
 

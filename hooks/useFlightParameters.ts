@@ -2,17 +2,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Alert } from "react-native";
 import { bleService } from "../module/ble/services";
+import { MissionTranslations, defaultViTranslations } from "../types/i18n";
 
 export const ALTITUDE_MIN = 5.5;
 export const ALTITUDE_MAX = 300;
 export const ALTITUDE_STEP = 0.5;
 
 interface UseFlightParametersOptions {
-  writeCharacteristic: (serviceUUID: string, characteristicUUID: string, value: string) => Promise<boolean>;
+  writeCharacteristic: (data: string, serviceUUID?: string, characteristicUUID?: string) => Promise<boolean>;
   isReady: boolean;
+  translations?: Partial<MissionTranslations>;
 }
 
 export const useFlightParameters = (options?: UseFlightParametersOptions) => {
+  const mergedTranslations = { ...defaultViTranslations, ...options?.translations };
   const [flightDirection, setFlightDirection] = useState(0);
   const [altitude, setAltitude] = useState(ALTITUDE_MIN);
   const [altitudeText, setAltitudeText] = useState(ALTITUDE_MIN.toString());
@@ -70,13 +73,13 @@ export const useFlightParameters = (options?: UseFlightParametersOptions) => {
     // Check BLE connection
     const connectedDevice = bleService.getConnectedDevice();
     if (!connectedDevice) {
-      Alert.alert("Lỗi", "Chưa kết nối BLE. Vui lòng đợi kết nối...");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorBLENotConnected);
       return;
     }
 
     // Check status
     if (!isReady) {
-      Alert.alert("Lỗi", "Drone chưa sẵn sàng. Status phải = 1");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorDroneNotReady);
       return;
     }
 
@@ -91,16 +94,16 @@ export const useFlightParameters = (options?: UseFlightParametersOptions) => {
 
       if (success) {
         console.log("✓ Đã gửi lệnh START thành công");
-        Alert.alert("Thành công", "Đã gửi lệnh bắt đầu bay!");
+        Alert.alert(mergedTranslations.success, mergedTranslations.successStartCommandSent);
       } else {
         console.error("✗ Gửi lệnh START thất bại");
-        Alert.alert("Lỗi", "Gửi lệnh START thất bại");
+        Alert.alert(mergedTranslations.error, mergedTranslations.errorStartCommandFailed);
       }
     } catch (error) {
       console.error("Error sending START command:", error);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi gửi lệnh START");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorStartCommandError);
     }
-  }, [options]);
+  }, [options, mergedTranslations]);
 
   return {
     flightDirection,

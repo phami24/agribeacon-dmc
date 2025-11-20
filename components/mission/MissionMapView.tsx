@@ -11,11 +11,15 @@ interface MissionMapViewProps {
   mapRef: React.RefObject<MapboxGL.MapView | null>;
   cameraRef: React.RefObject<MapboxGL.Camera | null>;
   polygonPoints: Point[];
+  bufferPolygon?: Point[] | null;
+  showBufferPolygon?: boolean;
   waypoints: Array<{ latitude: number; longitude: number; altitude: number }>;
   homePosition: { longitude: number; latitude: number } | null;
+  hasReceivedHome: boolean;
   isMapLoaded: boolean;
   isDeleteMode: boolean;
   showCompassOverlay: boolean;
+  showMissionControls: boolean;
   previewFlightDirection: boolean;
   isGeneratingPath: boolean;
   draggingPointId: string | null;
@@ -45,11 +49,15 @@ export default function MissionMapView({
   mapRef,
   cameraRef,
   polygonPoints,
+  bufferPolygon,
+  showBufferPolygon = false,
   waypoints,
   homePosition,
+  hasReceivedHome,
   isMapLoaded,
   isDeleteMode,
   showCompassOverlay,
+  showMissionControls,
   previewFlightDirection,
   isGeneratingPath,
   draggingPointId,
@@ -114,6 +122,44 @@ export default function MissionMapView({
         </MapboxGL.PointAnnotation>
       )}
 
+      {/* Render buffer polygon (tab 2) - Ẩn khi ở mode chụp ảnh */}
+      {isMapLoaded &&
+        showBufferPolygon &&
+        bufferPolygon &&
+        bufferPolygon.length >= 3 &&
+        (() => {
+          const coords = getPolygonCoordinates(bufferPolygon);
+          if (coords.length === 0) return null;
+          return (
+            <MapboxGL.ShapeSource
+              id="buffer-polygon"
+              shape={{
+                type: "Feature",
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [coords],
+                },
+                properties: {},
+              }}
+            >
+              <MapboxGL.FillLayer
+                id="buffer-polygon-fill"
+                style={{
+                  fillColor: "rgba(255, 152, 0, 0.2)", // Orange với độ trong suốt
+                }}
+              />
+              <MapboxGL.LineLayer
+                id="buffer-polygon-line"
+                style={{
+                  lineColor: "#FF9800", // Orange
+                  lineWidth: 3,
+                  lineDasharray: [5, 5], // Đường nét đứt
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          );
+        })()}
+
       {/* Render polygon */}
       {isMapLoaded &&
         polygonPoints &&
@@ -150,20 +196,20 @@ export default function MissionMapView({
           );
         })()}
 
-      {/* Render polygon points */}
-      {polygonPoints.map((point) => (
+      {/* Render polygon points - Ẩn khi vào màn cài đặt thông số */}
+      {!showMissionControls && polygonPoints.map((point) => (
         <MapboxGL.PointAnnotation
           key={point.id}
           id={`draw-point-${point.id}`}
           coordinate={[point.longitude, point.latitude]}
-          draggable={!showCompassOverlay}
+          draggable={!showCompassOverlay && !showMissionControls}
           onDrag={(feature) => {
             const coords = feature.geometry.coordinates as [number, number];
             onPointDrag(point.id, coords);
           }}
           onDragEnd={onPointDragEnd}
           onSelected={() => {
-            if (isDeleteMode) {
+            if (isDeleteMode && !showMissionControls) {
               Alert.alert(
                 mergedTranslations.deletePoint,
                 mergedTranslations.confirmDelete,
@@ -204,8 +250,8 @@ export default function MissionMapView({
           </View>
       )}
 
-      {/* Render waypoint path when preview is enabled */}
-      {isMapLoaded && previewFlightDirection && waypoints.length >= 2 && !isGeneratingPath && (
+      {/* Render waypoint path when preview is enabled - chỉ hiện khi đã vào mode setup */}
+      {isMapLoaded && previewFlightDirection && waypoints.length >= 2 && !isGeneratingPath && !showCompassOverlay && showMissionControls && (
         <>
           {/* Render line first - will be behind markers */}
           <MapboxGL.ShapeSource
@@ -233,8 +279,8 @@ export default function MissionMapView({
         </>
       )}
       
-      {/* Waypoint markers - render separately after line to ensure they appear on top */}
-      {isMapLoaded && previewFlightDirection && waypoints.length >= 2 && !isGeneratingPath && (
+      {/* Waypoint markers - render separately after line to ensure they appear on top - chỉ hiện khi đã vào mode setup */}
+      {isMapLoaded && previewFlightDirection && waypoints.length >= 2 && !isGeneratingPath && !showCompassOverlay && showMissionControls && (
         <>
           {waypoints.slice(0, -1).map((wp, idx) => (
             <MapboxGL.PointAnnotation

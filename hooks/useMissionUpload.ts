@@ -6,8 +6,14 @@ import { useDroneDataStore } from "../store/droneDataStore";
 import { bleService } from "../module/ble/services";
 import { buildMissionCommand, isMissionUploadComplete } from "../utils/missionUtils";
 import { Point } from "../utils/polygonUtils";
+import { MissionTranslations, defaultViTranslations } from "../types/i18n";
 
-export const useMissionUpload = () => {
+interface UseMissionUploadOptions {
+  translations?: Partial<MissionTranslations>;
+}
+
+export const useMissionUpload = (options?: UseMissionUploadOptions) => {
+  const mergedTranslations = { ...defaultViTranslations, ...options?.translations };
   const { writeCharacteristic } = useBLE();
   const [isUploading, setIsUploading] = useState(false);
   const [wpDialogVisible, setWpDialogVisible] = useState(false);
@@ -68,14 +74,14 @@ export const useMissionUpload = () => {
   ) => {
     // Validate polygon
     if (!polygon || polygon.length < 3) {
-      Alert.alert("Lỗi", "Cần ít nhất 3 điểm để gửi mission");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorNeed3Points);
       return;
     }
 
     // Check BLE connection - check directly from service (more accurate)
     const connectedDevice = bleService.getConnectedDevice();
     if (!connectedDevice) {
-      Alert.alert("Lỗi", "Chưa kết nối BLE. Vui lòng đợi kết nối...");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorBLENotConnected);
       return;
     }
 
@@ -97,7 +103,7 @@ export const useMissionUpload = () => {
       // Show loading and dialog immediately
       setIsUploading(true);
       setWpDialogVisible(true);
-      setWpValue("Đang gửi...");
+      setWpValue(mergedTranslations.sending);
 
       // Send via BLE
       const success = await writeCharacteristic(missionCmd);
@@ -113,15 +119,15 @@ export const useMissionUpload = () => {
         console.error("✗ Gửi lệnh thất bại");
         setIsUploading(false);
         setWpDialogVisible(false);
-        Alert.alert("Lỗi", "Gửi lệnh thất bại");
+        Alert.alert(mergedTranslations.error, mergedTranslations.errorMissionFailed);
       }
     } catch (error) {
       console.error("Error sending mission command:", error);
       setIsUploading(false);
       setWpDialogVisible(false);
-      Alert.alert("Lỗi", "Có lỗi xảy ra khi gửi lệnh");
+      Alert.alert(mergedTranslations.error, mergedTranslations.errorMissionError);
     }
-  }, [writeCharacteristic, checkWPStatus]);
+  }, [writeCharacteristic, checkWPStatus, mergedTranslations]);
 
   return {
     isUploading,

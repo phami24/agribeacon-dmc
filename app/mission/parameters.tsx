@@ -17,6 +17,13 @@ import {
   Linking,
   Platform,
 } from "react-native";
+import WhiteUploadIcon from "../../assets/map/white-upload.svg";
+import BlackUploadIcon from "../../assets/map/black-upload.svg";
+import StartIcon from "../../assets/map/start.svg";
+import ClockIcon from "../../assets/map/clock.svg";
+import LineIcon from "../../assets/map/line.svg";
+import BatteryIcon from "../../assets/map/battery.svg";
+import BedIcon from "../../assets/map/bed.svg";
 import { useRouter, useFocusEffect } from "expo-router";
 import MapboxGL from "@rnmapbox/maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,7 +31,6 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import CompassOverlay from "../../components/CompassOverlay";
 import DrawToolbar from "../../components/mission/DrawToolbar";
 import MissionTopBar from "../../components/mission/MissionTopBar";
-import MissionSidebar from "../../components/mission/MissionSidebar";
 import MissionMapView from "../../components/mission/MissionMapView";
 import WPProgressDialog from "../../components/mission/WPProgressDialog";
 import BluetoothConnectButton from "../../components/BluetoothConnectButton";
@@ -36,6 +42,7 @@ import { useBLE } from "../../module/ble/hooks/useBLE";
 import { useDroneDataStore } from "../../store/droneDataStore";
 import { bleService } from "../../module/ble/services";
 import { State } from "react-native-ble-plx";
+import * as BleConstants from "../../constants/BLEConstants";
 import { usePolygonDrawing } from "../../hooks/usePolygonDrawing";
 import { useMissionUpload } from "../../hooks/useMissionUpload";
 import { useFlightParameters, ALTITUDE_MIN, ALTITUDE_MAX, ALTITUDE_STEP } from "../../hooks/useFlightParameters";
@@ -47,6 +54,7 @@ import {
   calculatePolygonBounds,
   calculatePolygonCenter,
   getCompassZoomLevel,
+  calculateBufferPolygon,
 } from "../../utils/polygonUtils";
 import { defaultMissionTheme } from "../../types/theme";
 import { defaultViTranslations } from "../../constants/i18n";
@@ -85,6 +93,7 @@ export default function FlightParametersScreen() {
   const flightParams = useFlightParameters({
     writeCharacteristic,
     isReady,
+    translations: defaultViTranslations,
   });
   const {
     flightDirection,
@@ -108,6 +117,7 @@ export default function FlightParametersScreen() {
   const [sidebarCurrentWidth, setSidebarCurrentWidth] = useState(SIDEBAR_TARGET_WIDTH);
   const [showMissionControls, setShowMissionControls] = useState(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<1 | 2>(1); // Tab 1: mặc định, Tab 2: chụp ảnh
   const [waypoints, setWaypoints] = useState<
     Array<{ latitude: number; longitude: number; altitude: number }>
   >([]);
@@ -118,7 +128,7 @@ export default function FlightParametersScreen() {
   }, [SIDEBAR_TARGET_WIDTH]);
 
   // Polygon drawing hook
-  const polygonDrawing = usePolygonDrawing();
+  const polygonDrawing = usePolygonDrawing({ translations: defaultViTranslations });
   const {
     polygonPoints,
     history,
@@ -141,6 +151,21 @@ export default function FlightParametersScreen() {
     return ensurePolygonClosed(ordered);
   }, [polygonPoints]);
 
+  // Calculate buffer polygon for tab 2 (chụp ảnh)
+  // Buffer distance: 50 meters (có thể điều chỉnh)
+  const bufferPolygon = useMemo(() => {
+    if (!orderedAndClosedPolygon || activeTab !== 2) return null;
+    const bufferDistance = 50; // meters
+    return calculateBufferPolygon(orderedAndClosedPolygon, bufferDistance);
+  }, [orderedAndClosedPolygon, activeTab]);
+
+  // Auto-enable preview when switching to tab 2
+  useEffect(() => {
+    if (activeTab === 2 && bufferPolygon) {
+      setPreviewFlightDirection(true);
+    }
+  }, [activeTab, bufferPolygon]);
+
   const polygonBounds = useMemo(() => {
     return calculatePolygonBounds(orderedAndClosedPolygon || []);
   }, [orderedAndClosedPolygon]);
@@ -154,7 +179,7 @@ export default function FlightParametersScreen() {
   }, [polygonBounds]);
 
   // Mission upload hook
-  const missionUpload = useMissionUpload();
+  const missionUpload = useMissionUpload({ translations: defaultViTranslations });
   const {
     isUploading,
     wpDialogVisible,
@@ -166,10 +191,21 @@ export default function FlightParametersScreen() {
   // Wrapper for handleSendToDrone to get polygon from state
   const handleSendToDrone = useCallback(async () => {
     if (!polygonPoints || polygonPoints.length < 3) {
-      Alert.alert("Lỗi", "Cần ít nhất 3 điểm để gửi mission");
+      Alert.alert(defaultViTranslations.error, defaultViTranslations.errorNeed3Points);
       return;
     }
 
+    // Tab 2: gửi buffer polygon với hướng 0 độ, độ cao 300m
+    if (activeTab === 2 && bufferPolygon) {
+      const polygon = bufferPolygon.slice(0, -1).map((p: Point) => ({
+        latitude: p.latitude,
+        longitude: p.longitude,
+      }));
+      await handleSendToDroneFromHook(polygon, 300, 0); // Độ cao 300m, hướng 0 độ
+      return;
+    }
+
+    // Tab 1: logic cũ
     // Get polygon (remove last point if it's duplicate of first)
     const polygon = orderedAndClosedPolygon 
       ? orderedAndClosedPolygon.slice(0, -1).map((p: Point) => ({
@@ -182,7 +218,7 @@ export default function FlightParametersScreen() {
         }));
 
     await handleSendToDroneFromHook(polygon, altitude, flightDirection);
-  }, [polygonPoints, orderedAndClosedPolygon, altitude, flightDirection, handleSendToDroneFromHook]);
+  }, [polygonPoints, orderedAndClosedPolygon, bufferPolygon, activeTab, altitude, flightDirection, handleSendToDroneFromHook]);
 
   const handleBackButtonPress = useCallback(() => {
     if (showMissionControls) {
@@ -385,7 +421,8 @@ export default function FlightParametersScreen() {
 
   const handleMapPress = useCallback(
     (event: any) => {
-      if (showCompassOverlay || isDeleteMode) return;
+      // Không cho chỉnh sửa khi đã vào màn cài đặt thông số
+      if (showCompassOverlay || isDeleteMode || showMissionControls) return;
       if (draggingPointId) {
         handlePointDragEnd();
       }
@@ -417,6 +454,7 @@ export default function FlightParametersScreen() {
       handlePointDragEnd,
       isDeleteMode,
       showCompassOverlay,
+      showMissionControls,
     ]
   );
 
@@ -430,7 +468,64 @@ export default function FlightParametersScreen() {
 
   // Generate waypoints when preview is enabled - chỉ dùng debounced values
   React.useEffect(() => {
-    if (previewFlightDirection && orderedAndClosedPolygon) {
+    // Tab 2: tự động vẽ waypoints trên buffer polygon với hướng 0 độ, độ cao 300m
+    if (activeTab === 2 && bufferPolygon) {
+      setIsGeneratingPath(true);
+      let cancelled = false;
+      
+      const generatePath = () => {
+        if (cancelled) {
+          setIsGeneratingPath(false);
+          return;
+        }
+        
+        setTimeout(() => {
+          if (cancelled) {
+            setIsGeneratingPath(false);
+            return;
+          }
+          
+          try {
+            const home = homePosition 
+              ? { latitude: homePosition.latitude, longitude: homePosition.longitude }
+              : bufferPolygon[0];
+            
+            const polygon = bufferPolygon.slice(0, -1).map((p) => ({
+              latitude: p.latitude,
+              longitude: p.longitude,
+            }));
+            
+            const fov = 23.0;
+            const photoAltitude = 300; // Độ cao cố định 300m cho tab 2
+            const photoDirection = 0; // Hướng cố định 0 độ cho tab 2
+            
+            const generatedWaypoints = generateOptimizedPath(
+              polygon,
+              home,
+              photoAltitude,
+              fov,
+              photoDirection
+            );
+            
+            if (!cancelled) {
+              setWaypoints(generatedWaypoints);
+              setIsGeneratingPath(false);
+            }
+          } catch (error) {
+            console.error("Error generating photo path:", error);
+            setIsGeneratingPath(false);
+          }
+        }, 0);
+      };
+      
+      const timeoutId = setTimeout(generatePath, 50);
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+        setIsGeneratingPath(false);
+      };
+    } else if (previewFlightDirection && orderedAndClosedPolygon && activeTab === 1) {
+      // Tab 1: logic cũ với preview và debounced values
       // Get home point từ store (HOME từ BLE) hoặc first point of polygon
       const home = homePosition 
         ? { latitude: homePosition.latitude, longitude: homePosition.longitude }
@@ -490,7 +585,7 @@ export default function FlightParametersScreen() {
     } else {
       setWaypoints([]);
     }
-  }, [previewFlightDirection, orderedAndClosedPolygon, debouncedAltitude, debouncedFlightDirection, homePosition]);
+  }, [previewFlightDirection, orderedAndClosedPolygon, bufferPolygon, activeTab, debouncedAltitude, debouncedFlightDirection, homePosition]);
 
 
   return (
@@ -500,12 +595,16 @@ export default function FlightParametersScreen() {
         mapRef={mapRef}
         cameraRef={cameraRef}
         polygonPoints={polygonPoints}
+        bufferPolygon={activeTab === 2 ? bufferPolygon : null}
+        showBufferPolygon={false}
         waypoints={waypoints}
         homePosition={homePosition}
+        hasReceivedHome={hasReceivedHome}
         isMapLoaded={isMapLoaded}
         isDeleteMode={isDeleteMode}
         showCompassOverlay={showCompassOverlay}
-        previewFlightDirection={previewFlightDirection}
+        showMissionControls={showMissionControls}
+        previewFlightDirection={previewFlightDirection || activeTab === 2}
         isGeneratingPath={isGeneratingPath}
         draggingPointId={draggingPointId}
         onMapPress={handleMapPress}
@@ -532,16 +631,19 @@ export default function FlightParametersScreen() {
         }}
       />
 
-      <DrawToolbar
-        historyLength={history.length}
-        isDeleteMode={isDeleteMode}
-        polygonPointsLength={polygonPoints.length}
-        onUndo={handleUndo}
-        onToggleDeleteMode={handleToggleDeleteMode}
-        onClearAll={handleClearAll}
-        theme={defaultMissionTheme}
-        translations={defaultViTranslations}
-      />
+      {/* DrawToolbar - chỉ hiện khi không ở mode setup */}
+      {!showMissionControls && (
+        <DrawToolbar
+          historyLength={history.length}
+          isDeleteMode={isDeleteMode}
+          polygonPointsLength={polygonPoints.length}
+          onUndo={handleUndo}
+          onToggleDeleteMode={handleToggleDeleteMode}
+          onClearAll={handleClearAll}
+          theme={defaultMissionTheme}
+          translations={defaultViTranslations}
+        />
+      )}
 
       {/* Top Bar - luôn hiển thị nút back và trạng thái Bluetooth */}
       <MissionTopBar
@@ -556,118 +658,401 @@ export default function FlightParametersScreen() {
         onBackPress={handleBackButtonPress}
         theme={defaultMissionTheme}
         translations={defaultViTranslations}
-        onBluetoothPress={async () => {
-          try {
-            if (connectionState?.isConnected) {
-              return;
-            }
-
-            const manager = (bleService as any).manager;
-            if (manager) {
-              const state = await manager.state();
-              if (state !== State.PoweredOn) {
-                Alert.alert(
-                  "Bluetooth chưa bật",
-                  "Vui lòng bật Bluetooth để kết nối với thiết bị bay.",
-                  [
-                    {
-                      text: "Hủy",
-                      style: "cancel",
-                    },
-                    {
-                      text: "Mở Cài đặt",
-                      onPress: async () => {
-                        try {
-                          if (Platform.OS === "android") {
-                            await Linking.openSettings();
-                          } else {
-                            await Linking.openURL("app-settings:");
-                          }
-                        } catch (error) {
-                          console.error("[Mission] Error opening settings:", error);
-                        }
-                      },
-                    },
-                  ]
-                );
-                return;
-              }
-            }
-
-            const hasPermission = await bleService.requestPermissions();
-            if (hasPermission) {
-              await startScan(10000);
-            }
-          } catch (error: any) {
-            console.error("[Mission] Manual connect error:", error);
-            Alert.alert("Lỗi", `Không thể kết nối: ${error.message || error}`);
-          }
+        icons={{
+          flightTime: <ClockIcon width={16} height={16} />,
+          distance: <LineIcon width={16} height={16} />,
+          battery: <BatteryIcon width={16} height={16} />,
         }}
       />
 
       {/* Horizontal Sidebar - Flight Parameters */}
       {showMissionControls && !showCompassOverlay && (
-        <MissionSidebar
-          isExpanded={isSidebarExpanded}
-          sidebarWidth={sidebarCurrentWidth}
-          flightDirection={flightDirection}
-          altitude={altitude}
-          altitudeText={altitudeText}
-          previewFlightDirection={previewFlightDirection}
-          isUploading={isUploading}
-          isUploaded={isUploaded}
-          isReady={isReady}
-          polygonCenter={polygonCenter}
-          getCompassZoomLevel={getCompassZoomLevelCallback}
-          canDecreaseAltitude={canDecreaseAltitude}
-          canIncreaseAltitude={canIncreaseAltitude}
-          onAltitudeAdjust={handleAltitudeAdjust}
-          onAltitudeTextChange={(text) => {
-            const normalizedText = text.replace(',', '.');
-            setAltitudeText(normalizedText);
-            if (normalizedText === "" || normalizedText === "." || normalizedText === "-") {
-              return;
-            }
-            const num = parseFloat(normalizedText);
-            if (!isNaN(num) && num >= ALTITUDE_MIN && num <= ALTITUDE_MAX) {
-              setAltitude(num);
-            }
+        <HorizontalSidebar
+          collapsedWidth={60}
+          expandedWidth={SIDEBAR_TARGET_WIDTH}
+          minWidth={SIDEBAR_TARGET_WIDTH}
+          backgroundColor="rgba(0, 0, 0, 0.75)"
+          initialWidth={SIDEBAR_TARGET_WIDTH}
+          onExpandedChange={(expanded) => {
+            setIsSidebarExpanded(expanded);
           }}
-          onAltitudeBlur={() => {
-            const normalizedText = altitudeText.replace(',', '.');
-            const num = parseFloat(normalizedText);
-            if (isNaN(num) || normalizedText === "" || normalizedText === "." || normalizedText === "-") {
-              setAltitudeText(altitude.toString());
-              setAltitude(altitude);
-            } else {
-              let validNum = num;
-              if (num < ALTITUDE_MIN) validNum = ALTITUDE_MIN;
-              if (num > ALTITUDE_MAX) validNum = ALTITUDE_MAX;
-              setAltitude(validNum);
-              setAltitudeText(validNum.toString());
-            }
+          onWidthChange={(width) => {
+            setSidebarCurrentWidth(width);
           }}
-          onPreviewToggle={setPreviewFlightDirection}
-          onCompassPress={() => setShowCompassOverlay(true)}
-          onSendToDrone={handleSendToDrone}
-          onStartFlying={handleStartFlying}
-          onExpandedChange={setIsSidebarExpanded}
-          onWidthChange={setSidebarCurrentWidth}
-          cameraRef={cameraRef}
-          theme={defaultMissionTheme}
-          translations={defaultViTranslations}
-        />
+        >
+        <ScrollView
+          style={styles.sidebarScroll}
+          contentContainerStyle={styles.sidebarContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Tab System - Chỉ icon, không có chữ */}
+          {isSidebarExpanded && (
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 1 && styles.tabActive]}
+                onPress={() => setActiveTab(1)}
+              >
+                <BedIcon width={20} height={20} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 2 && styles.tabActive]}
+                onPress={() => setActiveTab(2)}
+              >
+                <Text style={styles.tabIcon}>📷</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Tab 1 Content - Flight Direction */}
+          {isSidebarExpanded && activeTab === 1 && (
+            <View style={[styles.parameterSection, styles.directionSection]}>
+              <View style={styles.labelRow}>
+                <View style={styles.directionLabelGroup}>
+                  <Text style={[styles.parameterLabel, styles.directionLabel]}>Hướng bay</Text>
+                  <View style={styles.directionValueInline}>
+                    <Text style={styles.directionValue}>{flightDirection}</Text>
+                    <Text style={styles.directionUnit}>°</Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.adjustOnMapButton, styles.directionMapButton]}
+                onPress={() => {
+                  if (polygonCenter && cameraRef.current) {
+                    const zoomLevel = getCompassZoomLevelCallback();
+                    cameraRef.current.setCamera({
+                      centerCoordinate: [polygonCenter.longitude, polygonCenter.latitude],
+                      zoomLevel,
+                      animationDuration: 600,
+                    });
+                  }
+                  setShowCompassOverlay(true);
+                }}
+              >
+                <Text style={styles.directionMapButtonIcon}>🧭</Text>
+                <Text style={styles.directionMapButtonText}>Điều chỉnh trên bản đồ</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Tab 1 Content - Altitude */}
+          {isSidebarExpanded && activeTab === 1 && (
+            <View style={styles.parameterSection}>
+              <View style={styles.labelRow}>
+                <Text style={styles.parameterLabel}>Độ cao (m)</Text>
+              </View>
+              <View style={styles.sliderContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.altitudeButton,
+                    !canDecreaseAltitude && styles.altitudeButtonDisabled,
+                  ]}
+                  onPress={() => handleAltitudeAdjust(-ALTITUDE_STEP)}
+                  disabled={!canDecreaseAltitude}
+                >
+                  <Text style={styles.altitudeButtonText}>-</Text>
+                </TouchableOpacity>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.valueInput}
+                    value={altitudeText}
+                    onChangeText={(text) => {
+                      // Allow any text input for better UX, including . and ,
+                      // Replace comma with dot for parsing
+                      const normalizedText = text.replace(',', '.');
+                      setAltitudeText(normalizedText);
+                      
+                      // Allow empty string, single dot, or comma for typing
+                      if (normalizedText === "" || normalizedText === "." || normalizedText === "-") {
+                        return;
+                      }
+                      
+                      // Try to parse and update value if valid
+                      const num = parseFloat(normalizedText);
+                      if (!isNaN(num)) {
+                        if (num >= ALTITUDE_MIN && num <= ALTITUDE_MAX) {
+                          setAltitude(num);
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // Validate and fix on blur
+                      const normalizedText = altitudeText.replace(',', '.');
+                      const num = parseFloat(normalizedText);
+                      if (isNaN(num) || normalizedText === "" || normalizedText === "." || normalizedText === "-") {
+                        setAltitudeText(altitude.toString());
+                        setAltitude(altitude);
+                      } else {
+                        let validNum = num;
+                        if (num < ALTITUDE_MIN) validNum = ALTITUDE_MIN;
+                        if (num > ALTITUDE_MAX) validNum = ALTITUDE_MAX;
+                        setAltitude(validNum);
+                        setAltitudeText(validNum.toString());
+                      }
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.altitudeButton,
+                    !canIncreaseAltitude && styles.altitudeButtonDisabled,
+                  ]}
+                  onPress={() => handleAltitudeAdjust(ALTITUDE_STEP)}
+                  disabled={!canIncreaseAltitude}
+                >
+                  <Text style={styles.altitudeButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Tab 1 Content - Preview Flight Direction Checkbox - Ở trên nút Gửi thông tin */}
+          {isSidebarExpanded && activeTab === 1 && (
+            <View style={styles.checkboxContainer}>
+              <Switch
+                value={previewFlightDirection}
+                onValueChange={setPreviewFlightDirection}
+                trackColor={{ false: "#767577", true: "#4CAF50" }}
+                thumbColor="#fff"
+              />
+              <Text style={styles.checkboxLabel}>Xem trước hướng bay</Text>
+            </View>
+          )}
+
+          {/* Tab 2 Content - Chụp ảnh - Hiển thị thông số nhưng không cho chỉnh sửa */}
+          {isSidebarExpanded && activeTab === 2 && (
+            <>
+              <View style={[styles.parameterSection, styles.directionSection]}>
+                <View style={styles.labelRow}>
+                  <View style={styles.directionLabelGroup}>
+                    <Text style={[styles.parameterLabel, styles.directionLabel]}>Hướng bay</Text>
+                    <View style={styles.directionValueInline}>
+                      <Text style={styles.directionValue}>0</Text>
+                      <Text style={styles.directionUnit}>°</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={[styles.adjustOnMapButton, styles.directionMapButton, styles.disabledButton]}>
+                  <Text style={[styles.directionMapButtonIcon, styles.disabledText]}>🧭</Text>
+                  <Text style={[styles.directionMapButtonText, styles.disabledText]}>Điều chỉnh trên bản đồ</Text>
+                </View>
+              </View>
+
+              <View style={styles.parameterSection}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.parameterLabel}>Độ cao (m)</Text>
+                </View>
+                <View style={styles.sliderContainer}>
+                  <TouchableOpacity
+                    style={[styles.altitudeButton, styles.altitudeButtonDisabled]}
+                    disabled={true}
+                  >
+                    <Text style={styles.altitudeButtonText}>-</Text>
+                  </TouchableOpacity>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.valueInput}
+                      value="300"
+                      editable={false}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.altitudeButton, styles.altitudeButtonDisabled]}
+                    disabled={true}
+                  >
+                    <Text style={styles.altitudeButtonText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.checkboxContainer}>
+                <Switch
+                  value={true}
+                  disabled={true}
+                  trackColor={{ false: "#767577", true: "#4CAF50" }}
+                  thumbColor="#fff"
+                />
+                <Text style={[styles.checkboxLabel, styles.disabledText]}>Xem trước hướng bay</Text>
+              </View>
+            </>
+          )}
+
+          {/* Send to Drone Button */}
+          <TouchableOpacity
+            style={isSidebarExpanded 
+              ? (isUploaded ? styles.sendButtonWhite : styles.sendButton) 
+              : styles.iconButton}
+            onPress={handleSendToDrone}
+            disabled={isUploading}
+          >
+            {isSidebarExpanded ? (
+              <>
+                {isUploading ? (
+                  <ActivityIndicator size="small" color={isUploaded ? "#000" : "#fff"} style={{ marginRight: 8 }} />
+                ) : (
+                  isUploaded ? (
+                    <BlackUploadIcon width={16} height={16} style={{ marginRight: 6 }} />
+                  ) : (
+                    <WhiteUploadIcon width={16} height={16} style={{ marginRight: 6 }} />
+                  )
+                )}
+                <Text style={[
+                  styles.sendButtonText,
+                  isUploaded && styles.sendButtonTextBlack
+                ]}>
+                  {isUploading ? "Đang gửi..." : "Gửi thông tin lên drone"}
+                </Text>
+                {!isUploading && <Text style={[
+                  styles.sendButtonArrow,
+                  isUploaded && styles.sendButtonArrowBlack
+                ]}>↑</Text>}
+              </>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
+                {isUploading ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <>
+                    <WhiteUploadIcon width={14} height={14} />
+                    <Text style={{ fontSize: 10, marginLeft: 2 }}>↑</Text>
+                  </>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Start Flying Button - chỉ hiển thị sau khi upload xong */}
+          {isUploaded && isSidebarExpanded && (
+            <TouchableOpacity
+              style={[
+                styles.startButton,
+                !isReady && styles.startButtonDisabled
+              ]}
+              onPress={async () => {
+                // Check BLE connection
+                const connectedDevice = bleService.getConnectedDevice();
+                if (!connectedDevice) {
+                  Alert.alert("Lỗi", "Chưa kết nối BLE. Vui lòng đợi kết nối...");
+                  return;
+                }
+
+                // Check status
+                if (!isReady) {
+                  Alert.alert("Lỗi", "Drone chưa sẵn sàng. Status phải = 1");
+                  return;
+                }
+
+                try {
+                  // Gửi lệnh START
+                  const startCmd = "START\r\n";
+                  console.log("=== LỆNH START ===");
+                  console.log(startCmd);
+                  console.log("==================");
+
+                  const success = await writeCharacteristic(
+                    BleConstants.NORDIC_UART_SERVICE,
+                    BleConstants.NORDIC_TX_UUID,
+                    startCmd
+                  );
+
+                  if (success) {
+                    console.log("✓ Đã gửi lệnh START thành công");
+                    Alert.alert("Thành công", "Đã gửi lệnh bắt đầu bay!");
+                  } else {
+                    console.error("✗ Gửi lệnh START thất bại");
+                    Alert.alert("Lỗi", "Gửi lệnh START thất bại");
+                  }
+                } catch (error) {
+                  console.error("Error sending START command:", error);
+                  Alert.alert("Lỗi", "Có lỗi xảy ra khi gửi lệnh START");
+                }
+              }}
+              disabled={!isReady}
+            >
+              <StartIcon width={16} height={16} style={{ marginRight: 6 }} />
+              <Text style={styles.startButtonText}>Bắt đầu bay</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+        </HorizontalSidebar>
       )}
 
       {!showMissionControls && (
         <TouchableOpacity
           style={[styles.bottomRightButton, { bottom: insets.bottom + 20 }]}
-          onPress={() => setShowMissionControls(true)}
+          onPress={() => {
+            // Kiểm tra đã vẽ polygon chưa
+            if (!polygonPoints || polygonPoints.length < 3) {
+              Alert.alert(
+                defaultViTranslations.error || "Lỗi",
+                defaultViTranslations.errorNeed3Points || "Cần vẽ ít nhất 3 điểm để cài đặt thông số bay"
+              );
+              return;
+            }
+            setShowMissionControls(true);
+          }}
         >
           <Text style={styles.bottomRightButtonText}>Cài đặt thông số bay</Text>
           <Text style={styles.bottomRightButtonIcon}>→</Text>
         </TouchableOpacity>
       )}
+
+      {/* Bluetooth Button - góc dưới bên trái */}
+      <View style={[styles.bottomLeftButton, { bottom: insets.bottom + 20, left: 20 }]}>
+        <BluetoothConnectButton
+          connectionState={connectionState}
+          isScanning={isScanning}
+          onPress={async () => {
+            try {
+              if (connectionState?.isConnected) {
+                return;
+              }
+
+              const manager = (bleService as any).manager;
+              if (manager) {
+                const state = await manager.state();
+                if (state !== State.PoweredOn) {
+                Alert.alert(
+                  defaultViTranslations.bluetoothNotEnabled,
+                  defaultViTranslations.bluetoothNotEnabledMessage,
+                  [
+                    {
+                      text: defaultViTranslations.cancel,
+                      style: "cancel",
+                    },
+                    {
+                      text: defaultViTranslations.openSettings,
+                        onPress: async () => {
+                          try {
+                            if (Platform.OS === "android") {
+                              await Linking.openSettings();
+                            } else {
+                              await Linking.openURL("app-settings:");
+                            }
+                          } catch (error) {
+                            console.error("[Mission] Error opening settings:", error);
+                          }
+                        },
+                      },
+                    ]
+                  );
+                  return;
+                }
+              }
+
+              const hasPermission = await bleService.requestPermissions();
+              if (hasPermission) {
+                await startScan(10000);
+              }
+            } catch (error: any) {
+              console.error("[Mission] Manual connect error:", error);
+              Alert.alert(defaultViTranslations.error, `${defaultViTranslations.errorCannotConnect}: ${error.message || error}`);
+            }
+          }}
+        />
+      </View>
 
       {/* Compass Overlay */}
       {showCompassOverlay && polygonCenter && (
@@ -1047,5 +1432,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  bottomLeftButton: {
+    position: "absolute",
+    zIndex: 10,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  tabActive: {
+    backgroundColor: "#fff",
+  },
+  tabIcon: {
+    fontSize: 20,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  disabledText: {
+    opacity: 0.6,
+  },
+  disabledInput: {
+    opacity: 0.6,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
 });

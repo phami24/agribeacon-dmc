@@ -3,19 +3,21 @@
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import MapboxGL from '@rnmapbox/maps';
-import { MAPBOX_ACCESS_TOKEN } from '../constants/MapboxConstants';
-import { BLEConfigProvider } from '../module/ble/context/BLEConfigContext';
+import { AppConfigProvider } from '../module/app/context/AppConfigProvider';
 import { agriBeaconBLEConfig } from '../constants/exampleBLEConfig';
-import { useAutoConnect } from '../module/ble/hooks/useAutoConnect';
 import { useBLEStoreSync } from '../hooks/useBLEStoreSync';
 
-// Initialize Mapbox
-MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
+// DEMO: Example config - Trong thực tế, bạn phải tạo config của riêng mình
+const demoAppConfig = {
+  ble: agriBeaconBLEConfig,
+  mapbox: {
+    accessToken: 'sk.eyJ1IjoicGhhbWl6IiwiYSI6ImNtaHlpYjdncjA0aDgyaXF6YWV0Y3RiN2EifQ.LFy_I6P8E4_umZ5ALIW8gQ', // DEMO TOKEN
+  },
+};
 
 function AppContent() {
   useBLEStoreSync();
-  useAutoConnect();
+  // NOTE: useAutoConnect removed - using AutoConnector in BLEService instead to avoid conflicts
 
   return (
     <Stack
@@ -32,10 +34,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar hidden />
-      {/* DEMO: Sử dụng example config - Trong thực tế, bạn phải tạo config của riêng mình */}
-      <BLEConfigProvider config={agriBeaconBLEConfig}>
+      {/* DEMO: Sử dụng AppConfigProvider để wrap tất cả configs */}
+      <AppConfigProvider config={demoAppConfig}>
         <AppContent />
-      </BLEConfigProvider>
+      </AppConfigProvider>
     </SafeAreaProvider>
   );
 }

@@ -129,16 +129,20 @@ export const useBLEStoreSync = () => {
       }
     );
 
-    // Data received
+    // Data received - chỉ update khi data thực sự thay đổi để tránh infinite loop
+    let lastDataValue: string | null = null;
     const unsubscribeDataReceived = eventBus.on(
       BLEEventType.DATA_RECEIVED,
       (data) => {
-        // Chỉ log tóm tắt để tránh lag
-        setLatestData(data);
-        // Chỉ log vào store, không log console (đã log ở BLEService)
-        addLog(
-          `[${new Date(data.timestamp).toLocaleTimeString()}] 📨 Data: ${data.value.substring(0, 80)}${data.value.length > 80 ? '...' : ''}`
-        );
+        // Chỉ update nếu giá trị thay đổi
+        if (lastDataValue !== data.value) {
+          setLatestData(data);
+          lastDataValue = data.value;
+          // Chỉ log vào store, không log console (đã log ở BLEService)
+          addLog(
+            `[${new Date(data.timestamp).toLocaleTimeString()}] 📨 Data: ${data.value.substring(0, 80)}${data.value.length > 80 ? '...' : ''}`
+          );
+        }
       }
     );
 

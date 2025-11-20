@@ -146,3 +146,65 @@ export const getCompassZoomLevel = (bounds: ReturnType<typeof calculatePolygonBo
   return 17.5;
 };
 
+// Calculate buffer polygon (expand polygon outward)
+// distanceInMeters: distance to expand in meters
+export const calculateBufferPolygon = (
+  points: Point[],
+  distanceInMeters: number
+): Point[] => {
+  if (!points || points.length < 3) return [];
+
+  // Remove duplicate last point if exists
+  const pointsToProcess = points.slice(0, -1);
+  const closedPoints = ensurePolygonClosed(pointsToProcess);
+  const processedPoints = closedPoints.slice(0, -1); // Remove duplicate last point
+
+  // Approximate: 1 degree latitude ≈ 111,320 meters
+  // 1 degree longitude ≈ 111,320 * cos(latitude) meters
+  const avgLat = processedPoints.reduce((sum, p) => sum + p.latitude, 0) / processedPoints.length;
+  const latOffset = distanceInMeters / 111320;
+  const lonOffset = distanceInMeters / (111320 * Math.cos((avgLat * Math.PI) / 180));
+
+  // For each point, calculate outward normal vector and offset
+  const bufferedPoints: Point[] = [];
+
+  for (let i = 0; i < processedPoints.length; i++) {
+    const prev = processedPoints[(i - 1 + processedPoints.length) % processedPoints.length];
+    const curr = processedPoints[i];
+    const next = processedPoints[(i + 1) % processedPoints.length];
+
+    // Calculate vectors
+    const v1x = curr.longitude - prev.longitude;
+    const v1y = curr.latitude - prev.latitude;
+    const v2x = next.longitude - curr.longitude;
+    const v2y = next.latitude - curr.latitude;
+
+    // Normalize vectors
+    const len1 = Math.sqrt(v1x * v1x + v1y * v1y);
+    const len2 = Math.sqrt(v2x * v2x + v2y * v2y);
+    const n1x = len1 > 0 ? -v1y / len1 : 0;
+    const n1y = len1 > 0 ? v1x / len1 : 0;
+    const n2x = len2 > 0 ? -v2y / len2 : 0;
+    const n2y = len2 > 0 ? v2x / len2 : 0;
+
+    // Average normal (bisector)
+    const nx = (n1x + n2x) / 2;
+    const ny = (n1y + n2y) / 2;
+    const nlen = Math.sqrt(nx * nx + ny * ny);
+    const normalizedNx = nlen > 0 ? nx / nlen : 0;
+    const normalizedNy = nlen > 0 ? ny / nlen : 0;
+
+    // Offset point
+    const offsetLat = normalizedNy * latOffset;
+    const offsetLon = normalizedNx * lonOffset;
+
+    bufferedPoints.push({
+      id: `buffer-${curr.id}`,
+      latitude: curr.latitude + offsetLat,
+      longitude: curr.longitude + offsetLon,
+    });
+  }
+
+  return ensurePolygonClosed(bufferedPoints);
+};
+

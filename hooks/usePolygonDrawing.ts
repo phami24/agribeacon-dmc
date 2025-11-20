@@ -3,8 +3,14 @@ import { useState, useCallback, useRef } from "react";
 import { Alert } from "react-native";
 import { usePolygonStore } from "../store/polygonStore";
 import { Point, HistoryAction, orderSimplePolygon, arePointsInSameOrder } from "../utils/polygonUtils";
+import { MissionTranslations, defaultViTranslations } from "../types/i18n";
 
-export const usePolygonDrawing = () => {
+interface UsePolygonDrawingOptions {
+  translations?: Partial<MissionTranslations>;
+}
+
+export const usePolygonDrawing = (options?: UsePolygonDrawingOptions) => {
+  const mergedTranslations = { ...defaultViTranslations, ...options?.translations };
   const polygonPoints = usePolygonStore((state) => state.points);
   const setPolygonPoints = usePolygonStore((state) => state.setPoints);
   const [history, setHistory] = useState<HistoryAction[]>([]);
@@ -77,12 +83,12 @@ export const usePolygonDrawing = () => {
   const handleClearAll = useCallback(() => {
     if (!polygonPoints.length) return;
     Alert.alert(
-      "Xóa tất cả",
-      "Bạn có chắc chắn muốn xóa tất cả các điểm?",
+      mergedTranslations.clearAll,
+      mergedTranslations.confirmClearAll,
       [
-        { text: "Hủy", style: "cancel" },
+        { text: mergedTranslations.cancel, style: "cancel" },
         {
-          text: "Xóa",
+          text: mergedTranslations.delete,
           style: "destructive",
           onPress: () => {
             saveStateToHistory();

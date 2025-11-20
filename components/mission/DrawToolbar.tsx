@@ -113,7 +113,7 @@ export default function DrawToolbar({
 const styles = StyleSheet.create({
   drawToolbar: {
     position: "absolute",
-    left: 12,
+    right: 12,
     zIndex: 12,
     flexDirection: "column",
     gap: 12,

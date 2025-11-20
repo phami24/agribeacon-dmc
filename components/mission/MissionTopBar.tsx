@@ -2,7 +2,6 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import BluetoothConnectButton from "../BluetoothConnectButton";
 import StatusIndicator from "../StatusIndicator";
 import StatusCard from "../StatusCard";
 import { BLEConnectionState } from "../../module/ble/types";
@@ -19,7 +18,6 @@ interface MissionTopBarProps {
   showMissionControls: boolean;
   showCompassOverlay: boolean;
   onBackPress: () => void;
-  onBluetoothPress: () => Promise<void>;
   theme?: Partial<MissionTheme>;
   customStyles?: {
     topBar?: ViewStyle;
@@ -47,7 +45,6 @@ export default function MissionTopBar({
   showMissionControls,
   showCompassOverlay,
   onBackPress,
-  onBluetoothPress,
   theme = defaultMissionTheme,
   customStyles = {},
   icons = {},
@@ -91,12 +88,6 @@ export default function MissionTopBar({
       </TouchableOpacity>
 
       <View style={mergedStyles.statusContainer}>
-        <BluetoothConnectButton
-          connectionState={connectionState}
-          isScanning={isScanning}
-          onPress={onBluetoothPress}
-        />
-
         {showMissionControls && !showCompassOverlay && (
           <>
             <StatusIndicator isReady={isReady} readyText={mergedTranslations.ready} notReadyText={mergedTranslations.notReady} />

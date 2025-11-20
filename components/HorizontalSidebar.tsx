@@ -104,9 +104,15 @@ export default function HorizontalSidebar({
           {children}
         </View>
       )}
-
+      
+      {/* Toggle Button - Trong sidebar, một nửa ra ngoài */}
       <TouchableOpacity
-        style={styles.toggleButton}
+        style={[
+          styles.toggleButton,
+          {
+            left: -20, // Một nửa button ra ngoài (20px)
+          }
+        ]}
         onPress={toggleSidebar}
         activeOpacity={0.8}
       >
@@ -129,7 +135,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 8,
-    overflow: "hidden",
+    overflow: "visible", // Cho phép nút toggle ra ngoài
     zIndex: 10,
   },
   content: {
@@ -140,9 +146,8 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     position: "absolute",
-    bottom: 12,
-    left: "50%",
-    transform: [{ translateX: -20 }],
+    top: "50%",
+    transform: [{ translateY: -20 }],
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -153,7 +158,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    elevation: 6,
+    elevation: 10,
+    zIndex: 9999, // Z-index rất cao để đè lên tất cả
   },
   toggleButtonText: {
     color: "#000",

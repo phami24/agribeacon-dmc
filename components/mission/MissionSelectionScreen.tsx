@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HorizontalSidebar from "../HorizontalSidebar";
-import BluetoothConnectButton from "../BluetoothConnectButton";
 import { FlightArea } from "../../data/flightAreas";
 import { MissionTheme, defaultMissionTheme } from "../../types/theme";
 import { MissionTranslations, defaultViTranslations } from "../../types/i18n";
@@ -332,7 +331,7 @@ export default function MissionSelectionScreen({
         })}
       </MapboxGL.MapView>
 
-      {/* Top Bar - Back + Bluetooth status */}
+      {/* Top Bar - Back only (Bluetooth hidden on selection screen) */}
       <View style={[mergedStyles.topBar, { top: insets.top + 10 }]}>
         <TouchableOpacity style={mergedStyles.backButton} onPress={handleBack}>
           <View style={[mergedStyles.backButtonCircle, { backgroundColor: mergedTheme.colors.buttonSecondary }]}>
@@ -345,12 +344,6 @@ export default function MissionSelectionScreen({
             )}
           </View>
         </TouchableOpacity>
-
-        <BluetoothConnectButton
-          connectionState={connectionState}
-          isScanning={isScanning}
-          onPress={onBluetoothPress}
-        />
       </View>
 
       {/* Manual Draw Button */}

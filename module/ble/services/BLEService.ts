@@ -30,6 +30,10 @@ class BLEService {
   private lastParsedValues: Map<string, string> = new Map();
   // BLE Configuration - BẮT BUỘC phải được set từ bên ngoài
   private config: BLEConfig | null = null;
+  // Prevent multiple disconnect handler calls
+  private disconnectHandlerRegistered: boolean = false;
+  private lastDisconnectTime: number = 0;
+  private disconnectDebounceMs: number = 1000; // 1 second debounce
 
   /**
    * Private constructor - Chỉ khởi tạo từ bên trong
@@ -170,17 +174,17 @@ class BLEService {
   ): Promise<void> {
     // Đang scan rồi thì không scan nữa
     if (this.isScanning) {
-      console.log("[BLE] Already scanning");
+      console.log("[BLE] ⏭️ Already scanning, skipping");
       return;
     }
 
-    // Kiểm tra Bluetooth state trước
+    // Check Bluetooth state before scanning
     const state = await this.manager.state();
     console.log("[BLE] Current Bluetooth state:", state);
     
     if (state !== State.PoweredOn) {
       const errorMsg = `Bluetooth is not ready. Current state: ${state}`;
-      console.error("[BLE] ❌", errorMsg);
+      console.log(`[BLE] ⏭️ ${errorMsg}, skipping scan`);
       eventBus.emit(BLEEventType.ERROR, {
         error: errorMsg,
         context: "scanDevices",
@@ -359,38 +363,56 @@ class BLEService {
         // Không throw error vì một số thiết bị không hỗ trợ MTU negotiation
       }
 
-      // Lắng nghe sự kiện ngắt kết nối
-      console.log("[BLE] 👂 Setting up disconnect listener...");
-      device.onDisconnected((error, disconnectedDevice) => {
-        const disconnectTime = new Date().toLocaleTimeString();
-        console.log(`[BLE] 🔌 [${disconnectTime}] Device disconnected`);
-        console.log("[BLE] 📱 Disconnected device ID:", disconnectedDevice?.id || "Unknown");
-        console.log("[BLE] 📱 Disconnected device name:", disconnectedDevice?.name || "Unknown");
-        if (error) {
-          console.log("[BLE] ⚠️ Disconnect reason:", error.message);
-        }
-        
-        this.connectedDevice = null;
+      // Lắng nghe sự kiện ngắt kết nối (chỉ đăng ký một lần)
+      if (!this.disconnectHandlerRegistered) {
+        console.log("[BLE] 👂 Setting up disconnect listener...");
+        device.onDisconnected((error, disconnectedDevice) => {
+          const now = Date.now();
+          // Debounce: ignore if called too soon after last disconnect
+          if (now - this.lastDisconnectTime < this.disconnectDebounceMs) {
+            console.log("[BLE] ⏭️ Ignoring duplicate disconnect event (debounced)");
+            return;
+          }
+          this.lastDisconnectTime = now;
 
-        // Emit events
-        eventBus.emit(BLEEventType.DEVICE_DISCONNECTED, {
-          deviceId: disconnectedDevice?.id || "",
-          reason: error?.message,
+          const disconnectTime = new Date().toLocaleTimeString();
+          console.log(`[BLE] 🔌 [${disconnectTime}] Device disconnected`);
+          console.log("[BLE] 📱 Disconnected device ID:", disconnectedDevice?.id || "Unknown");
+          console.log("[BLE] 📱 Disconnected device name:", disconnectedDevice?.name || "Unknown");
+          if (error) {
+            console.log("[BLE] ⚠️ Disconnect reason:", error.message);
+          }
+          
+          // Only process if this device was actually connected
+          if (this.connectedDevice?.id !== disconnectedDevice?.id) {
+            console.log("[BLE] ⏭️ Ignoring disconnect for different device");
+            return;
+          }
+
+          this.connectedDevice = null;
+          this.disconnectHandlerRegistered = false; // Reset flag for next connection
+
+          // Emit events
+          eventBus.emit(BLEEventType.DEVICE_DISCONNECTED, {
+            deviceId: disconnectedDevice?.id || "",
+            reason: error?.message,
+          });
+
+          eventBus.emit(BLEEventType.CONNECTION_STATE_CHANGED, {
+            deviceId: disconnectedDevice?.id || "",
+            isConnected: false,
+          });
+
+          // ====== AUTO RECONNECT START ======
+          console.log("[BLE] 🔄 Device disconnected → starting auto reconnect");
+
+          // gọi lớp quản lý reconnect với debounce
+          import("./AutoConnector").then(({ autoConnector }) => {
+            autoConnector.start();
+          });
         });
-
-        eventBus.emit(BLEEventType.CONNECTION_STATE_CHANGED, {
-          deviceId: disconnectedDevice?.id || "",
-          isConnected: false,
-        });
-
-        // ====== AUTO RECONNECT START ======
-        console.log("[BLE] 🔄 Device disconnected → starting auto reconnect");
-
-        // gọi lớp quản lý reconnect
-        import("./AutoConnector").then(({ autoConnector }) => {
-          autoConnector.start();
-        });
-      });
+        this.disconnectHandlerRegistered = true;
+      }
 
       // Emit connected events
       const connectTime = new Date().toLocaleTimeString();
@@ -450,6 +472,8 @@ class BLEService {
     try {
       await this.manager.cancelDeviceConnection(deviceId);
       this.connectedDevice = null;
+      this.disconnectHandlerRegistered = false; // Reset flag
+      this.lastDisconnectTime = Date.now(); // Update timestamp
       console.log(`[BLE] ✅ [${disconnectTime}] Device disconnected manually`);
       console.log("[BLE] 📱 Disconnected device ID:", deviceId);
       

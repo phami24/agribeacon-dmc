@@ -74,7 +74,17 @@ export const useBLEStore = create<BLEStore>((set, get) => ({
   clearLogs: () => set({ logs: [] }),
 
   // Actions - Data
-  setLatestData: (data) => set({ latestData: data }),
+  setLatestData: (data) => {
+    // Chỉ update nếu data thực sự thay đổi để tránh infinite loop
+    if (!data) {
+      set({ latestData: null });
+      return;
+    }
+    const current = get().latestData;
+    if (!current || current.value !== data.value || current.timestamp !== data.timestamp) {
+      set({ latestData: data });
+    }
+  },
 
   addParsedData: (key, value) =>
     set((state) => {
